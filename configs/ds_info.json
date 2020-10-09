@@ -8,10 +8,17 @@
     },
     "refclef": {
 	"data_dir": "./data/refclef",
-	"img_dir": "./data/referit/saiapr_tc12_images",
-	"trn_csv_file": "./data/referit/csv_dir/train_flat.csv",
+	"img_dir": "./data/refclef/images/saiapr_tc12_images",
+	"trn_csv_file": "./data/referit/csv_dir/train.csv",
 	"val_csv_file": "./data/referit/csv_dir/val.csv",
 	"test_csv_file": "./data/referit/csv_dir/test.csv"
+    },
+    "refcoco": {
+	"data_dir": "./data/refcoco",
+	"img_dir": "./data/refcoco/images/",
+	"trn_csv_file": "./data/refcoco/csv_dir/train.csv",
+	"val_csv_file": "./data/refcoco/csv_dir/val.csv",
+	"test_csv_file": "./data/refcoco/csv_dir/val.csv"
     },
     "flickr30k_c0": {
 	"data_dir": "./data/flickr30k",

@@ -4,6 +4,7 @@ Author: Arka Sadhu
 Adapted from https://github.com/lichengunc/refer
 """
 
+import os.path as osp
 import pandas as pd
 from pathlib import Path
 from tqdm import tqdm
@@ -21,8 +22,6 @@ class ReferItCSVPrepare(BaseCSVPrepare):
     """
 
     def after_init(self):
-        self.splitBy = 'berkeley'
-        self.data_dir = self.ds_root / 'refclef'
         self.ref_ann_file = self.data_dir / f'refs({self.splitBy}).p'
         self.ref_instance_file = self.data_dir / 'instances.json'
 
@@ -46,7 +45,11 @@ class ReferItCSVPrepare(BaseCSVPrepare):
             sents = [s['raw'] for s in sents]
             sents = [t.strip().lower() for t in sents]
             out_dict = {}
-            out_dict['img_id'] = f"{rj['image_id']}.jpg"
+            if 'file_name' in rj.keys():
+                rj['file_name'] = rj['file_name'][:27] + ".jpg"
+                out_dict['img_id'] = osp.join(rj['file_name'][5:14], rj['file_name'])
+            else:
+                out_dict['img_id'] = f"{rj['image_id']}.jpg"
             out_dict['bbox'] = inst_bbox
             out_dict['split'] = spl
             out_dict['query'] = sents
@@ -65,5 +68,6 @@ class ReferItCSVPrepare(BaseCSVPrepare):
 
 if __name__ == '__main__':
     ds_cfg = json.load(open('./data/ds_prep_config.json'))
-    ref = ReferItCSVPrepare(ds_cfg['refclef'])
+#    ref = ReferItCSVPrepare(ds_cfg['refclef'])
+    ref = ReferItCSVPrepare(ds_cfg['refcoco'])
     ref.save_annot_to_format()

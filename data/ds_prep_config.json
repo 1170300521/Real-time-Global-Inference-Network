@@ -8,7 +8,9 @@
 	"test_img_ids": "./data/flickr30k/flickr30k_entities/test.txt"
     },
     "refclef": {
-	"root": "./data/referit"
+	"root": "./data/refclef",
+	"data_dir": "./data/refclef/refclef",
+	"splitBy": "unc"
     },
     "flickr_unseen_words": {
 	"root": "./data/flickr30k/flickr_unseen_words"
@@ -16,5 +18,10 @@
     "vg_split": {
 	"data_dir": "/scratch/arka/Ark_git_files/visual_genome/vg_split",
 	"img_dir": "/scratch/arka/Ark_git_files/visual_genome"
+    },
+    "refcoco": {
+	 "root": "./data/refcoco",
+	 "data_dir": "./data/refcoco/refcoco/",
+	 "splitBy": "unc"
     }
 }

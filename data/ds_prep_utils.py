@@ -53,6 +53,8 @@ class BaseCSVPrepare(ABC):
         self.ds_root = Path(self.ds_prep_cfg.root).resolve()
         self.ann_file = self.ds_root / 'all_annot_new.json'
         self.csv_root = self.ds_root / 'csv_dir'
+        self.data_dir = Path(self.ds_prep_cfg.data_dir).resolve()
+        self.splitBy = self.ds_prep_cfg.splitBy
         self.csv_root.mkdir(exist_ok=True)
         self.after_init()
 
