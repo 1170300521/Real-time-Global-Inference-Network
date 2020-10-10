@@ -2,6 +2,7 @@
 Utility functions
 """
 from typing import Dict, List, Optional, Union, Any, Callable
+import math
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
@@ -590,6 +591,9 @@ class Learner:
         try:
             # Loop over epochs
             for epoch in mb:
+                for param in self.optimizer.param_groups:    
+                    self.update_log_file("EPOCH: {}, LR={}".format(epoch, param['lr']))
+                    break
                 self.num_epoch += 1
                 train_loss, train_acc = self.train_epoch(mb)
 
@@ -679,7 +683,7 @@ class Learner:
                 opt, factor=self.cfg.reduce_factor, patience=self.cfg.patience)
         else:
             lr_sched = torch.optim.lr_scheduler.LambdaLR(
-                opt, lambda epoch: 1)
+                opt, lambda epoch: math.pow(self.cfg.reduce_factor, epoch // self.cfg.step))
 
         return lr_sched
 
