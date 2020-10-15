@@ -470,15 +470,21 @@ class Learner:
 
         if 'num_epoch' in checkpoint.keys():
             self.num_epoch = checkpoint['num_epoch']
+            print("EPOCH:",self.num_epoch)
 
         if 'best_met' in checkpoint.keys():
             self.best_met = checkpoint['best_met']
+            print("best_met", self.best_met)
 
         if load_opt:
             self.optimizer = self.prepare_optimizer()
             self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            for param in self.optimizer.param_groups:  
+                print(self.optimizer)
+                self.update_log_file("LR={}".format(param['lr']))
+                break
             if 'scheduler_state_dict' in checkpoint:
-                self.lr_scheduler = self.prepare_scheduler()
+                self.lr_scheduler = self.prepare_scheduler(self.optimizer)
                 self.lr_scheduler.load_state_dict(
                     checkpoint['scheduler_state_dict'])
 

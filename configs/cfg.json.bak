@@ -1,10 +1,10 @@
 {
-    "ds_to_use": "flickr30k",
-    "bs": 16,
+    "ds_to_use": "refclef",
+    "bs": 64,
     "nw": 4,
     "bsv": 16,
     "nwv": 4,
-    "lr": 1e-4,
+    "lr": 5e-4,
     "devices": 0,
     "opt_fn": "Adam",
     "opt_fn_params": {
@@ -14,7 +14,7 @@
     "use_same_atb": true,
     "use_att_loss": true,
     "mdl_to_use": "retina",
-    "resize_img": [416, 416],
+    "resize_img": [320, 320],
     "tmp_path": "./tmp_wi_garan_flickr30k_att_loss",
     "use_multi": true,
     "use_focal": true,
@@ -29,12 +29,13 @@
     "epochs": 60,
     "use_bidirectional": true,
     "lstm_dim": 128,
-    "use_reduce_lr_plateau": true,
+    "use_reduce_lr_plateau": false,
     "patience": 2,
-    "reduce_factor": 0.1,
+    "reduce_factor": 0.5,
+    "step": 10,
     "lamb_reg": 1,
     "resume_path": "",
-    "resume": true,
+    "resume": false,
     "load_opt": false,
     "strict_load": true,
     "load_normally": true,
@@ -42,4 +43,3 @@
     "use_lang": true,
     "use_img": true
 }
-

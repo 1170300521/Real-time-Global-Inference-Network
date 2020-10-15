@@ -9,9 +9,9 @@
     "refclef": {
 	"data_dir": "./data/refclef",
 	"img_dir": "./data/refclef/images/saiapr_tc12_images",
-	"trn_csv_file": "./data/referit/csv_dir/train.csv",
-	"val_csv_file": "./data/referit/csv_dir/val.csv",
-	"test_csv_file": "./data/referit/csv_dir/test.csv"
+	"trn_csv_file": "./data/refclef/csv_dir/train_flat.csv",
+	"val_csv_file": "./data/refclef/csv_dir/val.csv",
+	"test_csv_file": "./data/refclef/csv_dir/test.csv"
     },
     "refcoco": {
 	"data_dir": "./data/refcoco",
