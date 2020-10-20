@@ -68,6 +68,6 @@ class ReferItCSVPrepare(BaseCSVPrepare):
 
 if __name__ == '__main__':
     ds_cfg = json.load(open('./data/ds_prep_config.json'))
-#    ref = ReferItCSVPrepare(ds_cfg['refclef'])
-    ref = ReferItCSVPrepare(ds_cfg['refcoco'])
+    ref = ReferItCSVPrepare(ds_cfg['refclef'])
+#    ref = ReferItCSVPrepare(ds_cfg['refcoco'])
     ref.save_annot_to_format()

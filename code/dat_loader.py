@@ -221,6 +221,7 @@ class ImgQuDataset(Dataset):
         return img_file, annotations, query_chosen
 
     def _read_annotations(self, trn_file):
+        print(trn_file)
         trn_data = pd.read_csv(trn_file)
         trn_data['bbox'] = trn_data.bbox.apply(
             lambda x: ast.literal_eval(x))
