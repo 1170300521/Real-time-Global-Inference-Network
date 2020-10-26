@@ -16,9 +16,25 @@
     "refcoco": {
 	"data_dir": "./data/refcoco",
 	"img_dir": "./data/refcoco/images/",
-	"trn_csv_file": "./data/refcoco/csv_dir/train.csv",
+	"trn_csv_file": "./data/refcoco/csv_dir/train_flat.csv",
 	"val_csv_file": "./data/refcoco/csv_dir/val.csv",
-	"test_csv_file": "./data/refcoco/csv_dir/val.csv"
+	"test_csv_fileA": "./data/refcoco/csv_dir/testA.csv",
+	"test_csv_fileB": "./data/refcoco/csv_dir/testB.csv"
+    },
+    "refcoco+": {
+	"data_dir": "./data/refcoco+",
+	"img_dir": "./data/refcoco+/images/",
+	"trn_csv_file": "./data/refcoco+/csv_dir/train_flat.csv",
+	"val_csv_file": "./data/refcoco+/csv_dir/val.csv",
+	"test_csv_fileA": "./data/refcoco+/csv_dir/testA.csv",
+	"test_csv_fileB": "./data/refcoco+/csv_dir/testB.csv"
+    },
+    "refcocog": {
+	"data_dir": "./data/refcocog",
+	"img_dir": "./data/refcoco/images/",
+	"trn_cv_file": "./data/refcocog/csv_dir/train_flat.csv",
+	"val_csv_file": "./data/refcocog/csv_dir/val.csv",
+	"test_csv_file": "./data/refcocog/csv_dir/val.csv"
     },
     "flickr30k_c0": {
 	"data_dir": "./data/flickr30k",

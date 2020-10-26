@@ -15,7 +15,7 @@ from extended_config import cfg as conf
 from dat_loader import get_data
 from afs import AdaptiveFeatureSelection
 from garan import GaranAttention
-from darknet import darknet53
+
 
 # conv2d, conv2d_relu are adapted from
 # https://github.com/fastai/fastai/blob/5c4cefdeaf11fdbbdf876dbe37134c118dca03ad/fastai/layers.py#L98
@@ -137,59 +137,17 @@ class BackBone(nn.Module):
         return out,att_maps
 
 
-class RetinaBackBone(BackBone):
+class YoloBackBone(BackBone):
     def after_init(self):
         self.num_chs = self.num_channels()
-        self.fpn = FPN_backbone([512,512,512], self.cfg, feat_size=self.out_chs).to(self.device)
-        self.afs_stage0=AdaptiveFeatureSelection(0,[],2,list(self.num_chs[1:]),self.num_chs[0],256,256,512).to(self.device)
-        self.afs_stage1=AdaptiveFeatureSelection(1,[self.num_chs[0]],1,[self.num_chs[-1]],self.num_chs[1],256,256,512).to(self.device)
-        self.afs_stage2=AdaptiveFeatureSelection(2,list(self.num_chs[:-1]),0,[],self.num_chs[-1],256,256,512).to(self.device)
+        self.afs_stage=AdaptiveFeatureSelection(0,[],2,list(self.num_chs[1:]),self.num_chs[0],256,256,512).to(self.device)
 
         self.garan_stage0 = GaranAttention(256, 512, n_head=2).to(self.device)
-        self.garan_stage1 = GaranAttention(256, 512, n_head=2).to(self.device)
-        self.garan_stage2 = GaranAttention(256, 512, n_head=2).to(self.device)
     def num_channels(self):
         return [self.encoder.layer2[-1].conv3.out_channels,
                 self.encoder.layer3[-1].conv3.out_channels,
                 self.encoder.layer4[-1].conv3.out_channels]
 
-    def encode_feats(self, inp,lang):
-        x = self.encoder.conv1(inp)
-        x = self.encoder.bn1(x)
-        x = self.encoder.relu(x)
-        x = self.encoder.maxpool(x)
-        x1 = self.encoder.layer1(x)
-        x2 = self.encoder.layer2(x1)
-        x3 = self.encoder.layer3(x2)
-        x4 = self.encoder.layer4(x3)
-        # print(lang.size())
-        x2_ = self.afs_stage0(lang,[x2, x3, x4])
-        x2_,E_1=self.garan_stage0(lang,x2_)
-        x3_ = self.afs_stage1(lang,[x2, x3, x4])
-        x3_,E_2 = self.garan_stage1(lang, x3_)
-        x4_ = self.afs_stage2(lang,[x2, x3, x4])
-        x4_,E_3 = self.garan_stage2(lang, x4_)
-        feats = self.fpn([x2_, x3_, x4_])
-        return feats,[E_1,E_2,E_3]
-
-
-class SSDBackBone(BackBone):
-    """
-    ssd_vgg.py already implements encoder
-    """
-
-    def encode_feats(self, inp):
-        return self.encoder(inp)
-
-
-class YoloBackBone(BackBone):
-    def after_init(self):
-        self.num_chs = self.num_channels()
-        self.afs_stage=AdaptiveFeatureSelection(2, [256, 512], 0, [], self.num_chs[-1], 2048,512,1024).to(self.device)
-
-        self.garan_stage = GaranAttention(2048, 1024, n_head=4).to(self.device)
-    def num_channels(self):
-        return [256, 512, 1024]
     def encode_feats(self, inp,lang):
         x2, x3, x4 = self.encoder(inp)
         # print(lang.size())
@@ -199,6 +157,7 @@ class YoloBackBone(BackBone):
 
         # Special case, the number of feature map is one.
         return [feats], [E]
+
 
 
 class ZSGNet(nn.Module):
@@ -221,21 +180,19 @@ class ZSGNet(nn.Module):
         # should be len(ratios) * len(scales)
         self.n_anchors = n_anchors
 
-        self.is_lstm = cfg['lang_to_use'] == 'lstm'
         self.emb_dim = cfg['emb_dim']
         self.bid = cfg['use_bidirectional']
         self.lstm_dim = cfg['lstm_dim']
-        self.img_dim = cfg['img_dim']
 
         # Calculate output dimension of LSTM
         self.lstm_out_dim = self.lstm_dim * (self.bid + 1)
 
         # Separate cases for language, image blind settings
         if self.cfg['use_lang'] and self.cfg['use_img']:
-            self.start_dim_head = self.lstm_dim*(self.bid+1) + self.img_dim + 2
+            self.start_dim_head = self.lstm_dim*(self.bid+1) + 256 + 2
         elif self.cfg['use_img'] and not self.cfg['use_lang']:
             # language blind
-            self.start_dim_head = self.img_dim
+            self.start_dim_head = 256
         elif self.cfg['use_lang'] and not self.cfg['use_img']:
             # image blind
             self.start_dim_head = self.lstm_dim*(self.bid+1)
@@ -248,7 +205,6 @@ class ZSGNet(nn.Module):
         if self.cfg['use_same_atb']:
             bias = torch.zeros(5 * self.n_anchors)
             bias[torch.arange(4, 5 * self.n_anchors, 5)] = -4
-            print(self.start_dim_head)
             self.att_reg_box = self._head_subnet(
                 5, self.n_anchors, final_bias=bias,
                 start_dim_head=self.start_dim_head
@@ -260,12 +216,8 @@ class ZSGNet(nn.Module):
             self.reg_box = self._head_subnet(
                 4, self.n_anchors, start_dim_head=self.start_dim_head)
 
-        if self.is_lstm:
-            self.lstm = nn.LSTM(self.emb_dim, self.lstm_dim,
-                                bidirectional=self.bid, batch_first=False)
-        else:
-            self.gru = nn.GRU(self.emb_dim, self.lstm_dim, 
-                                bidirectional=self.bid, batch_first=False)
+        self.lstm = nn.LSTM(self.emb_dim, self.lstm_dim,
+                            bidirectional=self.bid, batch_first=False)
         self.after_init()
 
     def after_init(self):
@@ -330,10 +282,8 @@ class ZSGNet(nn.Module):
 
         hidden_a = hidden_a.to(self.device)
         hidden_b = hidden_b.to(self.device)
-        if self.is_lstm:
-            return (hidden_a, hidden_b)
-        else:
-            return hidden_a
+
+        return (hidden_a, hidden_b)
 
     def apply_lstm(self, word_embs, qlens, max_qlen, get_full_seq=False):
         """
@@ -358,10 +308,7 @@ class ZSGNet(nn.Module):
             embeds, lengths=qlens1, batch_first=False)
         # To ensure no pains with DataParallel
         # self.lstm.flatten_parameters()
-        if self.is_lstm:
-            lstm_out1, (self.hidden, _) = self.lstm(packed_embed_inp, self.hidden)
-        else:
-            lstm_out1, self.hidden = self.gru(packed_embed_inp, self.hidden)
+        lstm_out1, (self.hidden, _) = self.lstm(packed_embed_inp, self.hidden)
 
         # T x B x L
         lstm_out, req_lens = pad_packed_sequence(

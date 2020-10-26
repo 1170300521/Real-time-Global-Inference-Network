@@ -314,13 +314,25 @@ def get_data(cfg):
                           ds_name=ds_name, split_type='valid')
     val_dl = get_dataloader(cfg, val_ds, is_train=False)
 
-    test_csv_file = cfg.ds_info[ds_name]['test_csv_file']
-    test_ds = ImgQuDataset(cfg=cfg, csv_file=test_csv_file,
-                           ds_name=ds_name, split_type='valid')
-    test_dl = get_dataloader(cfg, test_ds, is_train=False)
+    if ds_name == 'refcoco' or ds_name == 'refcoco+':
+        test_csv_filea = cfg.ds_info[ds_name]['test_csv_fileA']
+        test_dsa = ImgQuDataset(cfg=cfg, csv_file=test_csv_filea,
+                            ds_name=ds_name, split_type='valid')
+        test_dla = get_dataloader(cfg, test_dsa, is_train=False)
+        test_csv_fileb = cfg.ds_info[ds_name]['test_csv_fileB']
+        test_dsb = ImgQuDataset(cfg=cfg, csv_file=test_csv_fileb,
+                            ds_name=ds_name, split_type='valid')
+        test_dlb = get_dataloader(cfg, test_dsb, is_train=False)
+        test_dl={'testA': test_dla, 'testB': test_dlb}
+    else :
+        test_csv_file = cfg.ds_info[ds_name]['test_csv_file']
+        test_ds = ImgQuDataset(cfg=cfg, csv_file=test_csv_file,
+                            ds_name=ds_name, split_type='valid')
+        test_dl = get_dataloader(cfg, test_ds, is_train=False)
+        test_dl = {'test0': test_dl}
 
     data = DataWrap(path=cfg.tmp_path, train_dl=trn_dl, valid_dl=val_dl,
-                    test_dl={'test0': test_dl})
+                    test_dl=test_dl)
     return data
 
 

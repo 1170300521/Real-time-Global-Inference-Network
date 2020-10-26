@@ -58,13 +58,16 @@ class ZSGLoss(nn.Module):
         num_f_out = out['num_f_out']
         att_maps=out['att_maps']
 
-        if self.use_att_loss:
+        if self.use_att_loss and not self.cfg.mdl_to_use == 'realgin':
             # self.loss_keys.append('att_ls')
             iou_annot_stage_0 = inp['iou_annot_stage_0']
             iou_annot_stage_1 = inp['iou_annot_stage_1']
             iou_annot_stage_2 = inp['iou_annot_stage_2']
             att_loss=self.att_losses(att_maps[0],iou_annot_stage_0)+self.att_losses(att_maps[1],iou_annot_stage_1)+self.att_losses(att_maps[2],iou_annot_stage_2)
             att_loss=att_loss/3.
+        elif self.use_att_loss:
+            iou_annot = inp['iou_annot_stage_2']
+            att_loss = self.att_losses(att_maps[0], iou_annot)
         else:
             att_loss=torch.zeros([1]).to(att_box.device)
         device = att_box.device

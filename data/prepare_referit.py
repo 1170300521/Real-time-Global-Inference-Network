@@ -62,12 +62,17 @@ class ReferItCSVPrepare(BaseCSVPrepare):
     def get_trn_val_test_ids(self, output_annot: DF):
         trn_ids_mask = output_annot.split.apply(lambda x: x == 'train')
         val_ids_mask = output_annot.split.apply(lambda x: x == 'val')
-        test_ids_mask = output_annot.split.apply(lambda x: x == 'test')
+        if self.name == 'refcoco' or self.name=='refcoco+':
+            test_ids_mask = []
+            test_ids_mask.append(output_annot.split.apply(lambda x: x == 'testA'))
+            test_ids_mask.append(output_annot.split.apply(lambda x: x == 'testB'))
+        else:
+            test_ids_mask = output_annot.split.apply(lambda x: x == 'test')
         return trn_ids_mask, val_ids_mask, test_ids_mask
 
 
 if __name__ == '__main__':
     ds_cfg = json.load(open('./data/ds_prep_config.json'))
-    ref = ReferItCSVPrepare(ds_cfg['refclef'])
-#    ref = ReferItCSVPrepare(ds_cfg['refcoco'])
+#    ref = ReferItCSVPrepare(ds_cfg['refclef'])
+    ref = ReferItCSVPrepare(ds_cfg['refcoco+'])
     ref.save_annot_to_format()

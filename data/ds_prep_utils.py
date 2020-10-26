@@ -50,6 +50,7 @@ class BaseCSVPrepare(ABC):
             self.ds_prep_cfg = CN(self.ds_prep_cfg)
 
         #  Set the dataset root (resolve symbolic links)
+        self.name = self.ds_prep_cfg.name
         self.ds_root = Path(self.ds_prep_cfg.root).resolve()
         self.ann_file = self.ds_root / 'all_annot_new.json'
         self.csv_root = self.ds_root / 'csv_dir'
@@ -129,7 +130,14 @@ class BaseCSVPrepare(ABC):
         val_df = self.get_df_from_ids(val_ids, output_annot)
         val_df.to_csv(self.csv_root / 'val.csv', index=False, header=True)
 
-        if test_ids is not None:
+        if test_ids is not None and type(test_ids) != list:
             test_df = self.get_df_from_ids(test_ids, output_annot)
             test_df.to_csv(self.csv_root / 'test.csv',
                            index=False, header=True)
+        elif type(test_ids) == list:
+            test_dfa = self.get_df_from_ids(test_ids[0], output_annot)
+            test_dfa.to_csv(self.csv_root/ 'testA.csv',
+                            index=False, header=True)
+            test_dfb = self.get_df_from_ids(test_ids[1], output_annot)
+            test_dfb.to_csv(self.csv_root/ 'testB.csv',
+                            index=False, header=True)

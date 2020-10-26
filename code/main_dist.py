@@ -93,6 +93,7 @@ def main_dist(uid: str, **kwargs):
         if cfg.only_val:
             learn.testing(learn.data.valid_dl)
         if cfg.only_test:
+            print(learn.data.test_dl.keys())
             learn.testing(learn.data.test_dl)
 
 

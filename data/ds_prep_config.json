@@ -10,7 +10,8 @@
     "refclef": {
 	"root": "./data/refclef",
 	"data_dir": "./data/refclef/refclef",
-	"splitBy": "unc"
+	"splitBy": "unc",
+	"name": "refclef"
     },
     "flickr_unseen_words": {
 	"root": "./data/flickr30k/flickr_unseen_words"
@@ -22,6 +23,19 @@
     "refcoco": {
 	 "root": "./data/refcoco",
 	 "data_dir": "./data/refcoco/refcoco/",
-	 "splitBy": "unc"
+	 "splitBy": "unc",
+	 "name": "refcoco"
+    },
+    "refcoco+": {
+	 "root": "./data/refcoco+",
+	 "data_dir": "./data/refcoco+/refcoco+/",
+	 "splitBy": "unc",
+	 "name": "refcoco+"
+    },
+    "refcocog": {
+	 "root": "./data/refcocog",
+	 "data_dir": "./data/refcocog/refcocog/",
+	 "splitBy": "umd",
+	 "name": "refcocog"
     }
 }
