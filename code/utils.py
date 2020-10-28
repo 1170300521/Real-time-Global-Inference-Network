@@ -4,6 +4,9 @@ Utility functions
 from typing import Dict, List, Optional, Union, Any, Callable
 import math
 import torch
+import os.path as osp
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 from torch import nn
 from torch.utils.data import DataLoader
 from dataclasses import dataclass
@@ -277,6 +280,10 @@ class Learner:
         self.predictions_dir = Path(
             self.data.path) / 'predictions' / f'{self.uid}'
 
+        # Saves the visualization
+        self.visualize_dir = Path(
+            self.data.path) / 'visualize'/ f'{self.uid}'
+
         self.create_log_dirs()
 
     @exec_func_if_main_proc
@@ -351,6 +358,32 @@ class Learner:
                     for ind in range(num_preds)]
         return out_list
 
+    def visualize(self, out, batch):
+        att_maps = out['att_maps'][0]
+        imgs = batch['img']
+        idxs = batch['idxs']
+        bboxs = batch['bboxs']
+        sents = batch['sents']
+        
+        for i in range(len(idxs)):
+            filename = osp.join(self.visualize_dir, 'epoch_{}_{}.jpg'.format(self.num_epoch,idxs[i].item()))
+            fig, (ax1, ax2) = plt.subplots(1, 2)
+            feat = att_maps[i].cpu().numpy()
+            feat = (feat-feat.min())/(feat.max()-feat.min() + 1e-5)
+            img = imgs[i].cpu().permute(1,2,0).numpy()
+            bbox = bboxs[i].cpu().numpy()
+            ax1.imshow(img, interpolation='bilinear')
+            h = abs(bbox[2] - bbox[0])
+            w = abs(bbox[3] - bbox[1])
+            rect = patches.Rectangle((bbox[1],bbox[0]),w,h,linewidth=1,edgecolor='g',facecolor='none')
+            ax1.add_patch(rect)
+            ax2.imshow(feat, cmap='viridis', interpolation='bilinear')
+            fig.text(0, 0, sents[i])
+            plt.show()
+
+
+
+
     def validate(self, db: Optional[DataLoader] = None,
                  mb=None) -> List[torch.tensor]:
         "Validation loop, done after every epoch"
@@ -365,7 +398,8 @@ class Learner:
             nums = []
             for batch in progress_bar(db, parent=mb):
                 for b in batch.keys():
-                    batch[b] = batch[b].to(self.device)
+                    if b != 'sents':
+                        batch[b] = batch[b].to(self.device)
                 out = self.mdl(batch)
                 out_loss = self.loss_fn(out, batch)
 
@@ -382,6 +416,10 @@ class Learner:
                 }
                 predicted_box_dict_list += self.get_predictions_list(
                     prediction_dict)
+                break
+            # visualize att map
+            if self.cfg.only_val:
+                self.visualize(out, batch)
             nums = torch.tensor(nums).float().to(self.device)
             tot_nums = nums.sum()
             val_loss = compute_avg_dict(val_losses, nums)
@@ -404,7 +442,8 @@ class Learner:
             # Increment number of iterations
             self.num_it += 1
             for b in batch.keys():
-                batch[b] = batch[b].to(self.device)
+                if b != 'sents':
+                    batch[b] = batch[b].to(self.device)
             self.optimizer.zero_grad()
             out = self.mdl(batch)
             out_loss = self.loss_fn(out, batch)
@@ -704,7 +743,8 @@ class Learner:
         "Sanity check to see if model overfits on a batch"
         batch = next(iter(self.data.train_dl))
         for b in batch.keys():
-            batch[b] = batch[b].to(self.device)
+            if b != 'sents':
+                batch[b] = batch[b].to(self.device)
         self.mdl.train()
         opt = self.prepare_optimizer(epochs, lr)
 

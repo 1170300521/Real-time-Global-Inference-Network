@@ -248,7 +248,6 @@ class ZSGNet(nn.Module):
         if self.cfg['use_same_atb']:
             bias = torch.zeros(5 * self.n_anchors)
             bias[torch.arange(4, 5 * self.n_anchors, 5)] = -4
-            print(self.start_dim_head)
             self.att_reg_box = self._head_subnet(
                 5, self.n_anchors, final_bias=bias,
                 start_dim_head=self.start_dim_head

@@ -139,6 +139,7 @@ class ImgQuDataset(Dataset):
         h, w = img.height, img.width
 
         q_chosen = q_chosen.strip()
+        sents = q_chosen
         qtmp = nlp(str(q_chosen))
         if len(qtmp) == 0:
             # logger.error('Empty string provided')
@@ -196,8 +197,10 @@ class ImgQuDataset(Dataset):
             'qvec': torch.from_numpy(q_chosen_emb_vecs),
             'qlens': torch.tensor(qlen),
             'annot': torch.from_numpy(target).float(),
+            'bboxs': torch.from_numpy(rstarget).float(),
             'orig_annot': torch.tensor(annot).float(),
             'img_size': torch.tensor([h, w]),
+            'sents': sents,
             'iou_annot_stage_0':torch.tensor(iou_annot_stage_0).float(),
             'iou_annot_stage_1': torch.tensor(iou_annot_stage_1).float(),
             'iou_annot_stage_2': torch.tensor(iou_annot_stage_2).float()
@@ -221,7 +224,6 @@ class ImgQuDataset(Dataset):
         return img_file, annotations, query_chosen
 
     def _read_annotations(self, trn_file):
-        print(trn_file)
         trn_data = pd.read_csv(trn_file)
         trn_data['bbox'] = trn_data.bbox.apply(
             lambda x: ast.literal_eval(x))
@@ -261,7 +263,10 @@ def collater(batch):
     # query_vecs = [torch.Tensor(i['query'][:max_qlen]) for i in batch]
     out_dict = {}
     for k in batch[0]:
-        out_dict[k] = torch.stack([b[k] for b in batch]).float()
+        if k != 'sents':
+            out_dict[k] = torch.stack([b[k] for b in batch]).float()
+        else:
+            out_dict[k] = [b[k] for b in batch]
     out_dict['qvec'] = out_dict['qvec'][:, :max_qlen]
 
     return out_dict
