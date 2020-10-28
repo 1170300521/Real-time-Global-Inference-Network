@@ -13,7 +13,7 @@ import ssd_vgg
 from typing import Dict, Any
 from extended_config import cfg as conf
 from dat_loader import get_data
-from afs import AdaptiveFeatureSelection
+from afs import AdaptiveFeatureSelection, FeatureNormalize
 from garan import GaranAttention
 from darknet import darknet53
 
@@ -200,6 +200,38 @@ class YoloBackBone(BackBone):
         # Special case, the number of feature map is one.
         return [feats], [E]
 
+class RccfBackBone(BackBone):
+    def after_init(self):
+        self.f1 = FeatureNormalize(256, 512, 1024, down_sample=True, scale_factor=4)
+        self.f2 = FeatureNormalize(512, 512, 1024, down_sample=True, scale_factor=2)
+        self.k1 = nn.Linear(self.cfg.lstm_dim * (self.cfg.use_bidirectional + 1), self.cfg.img_dim)
+        self.k2 = nn.Linear(self.cfg.lstm_dim * (self.cfg.use_bidirectional + 1), self.cfg.img_dim)
+        self.k3 = nn.Linear(self.cfg.lstm_dim * (self.cfg.use_bidirectional + 1), self.cfg.img_dim)
+        self.top_reason = conv2d_relu(self.cfg.img_dim, 1024, 1)
+
+    def encode_feats(self, inp, lang):
+        c1, c2, c3 = self.encoder(inp)
+        b = c1.size(0)
+
+        c1 = self.f1(c1)
+        c2 = self.f2(c2)
+        filter_vec1 = self.k1(lang).view(b, 1024, 1, 1)
+        filter_vec2 = self.k2(lang).view(b, 1024, 1, 1)
+        filter_vec3 = self.k3(lang).view(b, 1024, 1, 1)
+        c1_attn = c1 * filter_vec1
+        c2_attn = c2 * filter_vec2
+        c3_attn = c3 * filter_vec3
+        # get featmap before yolo regression branch
+        feats = self.top_reason(c1_attn+c2_attn+c3_attn)
+        # get att map
+        c1_attn = c1_attn.sum(1, keepdim=False)
+        c2_attn = c2_attn.sum(1, keepdim=False)
+        c3_attn = c3_attn.sum(1, keepdim=False)
+        # build center map
+        center_logit = (c1_attn + c2_attn + c3_attn) / 3
+        E = torch.sigmoid(center_logit)
+        return [feats], [E]
+         
 
 class ZSGNet(nn.Module):
     """
@@ -465,6 +497,9 @@ def get_default_net(num_anchors=1, cfg=None):
     elif cfg['mdl_to_use'] == 'realgin':
         encoder = darknet53(True)
         backbone = YoloBackBone(encoder, cfg)
+    elif cfg['mdl_to_use'] == 'rccf':
+        encoder = darknet53(True)
+        backbone = RccfBackBone(encoder, cfg)
 
     zsg_net = ZSGNet(backbone, num_anchors, cfg=cfg)
     return zsg_net

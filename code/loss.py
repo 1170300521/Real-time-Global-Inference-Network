@@ -58,7 +58,7 @@ class ZSGLoss(nn.Module):
         num_f_out = out['num_f_out']
         att_maps=out['att_maps']
 
-        if self.use_att_loss and not self.cfg.mdl_to_use == 'realgin':
+        if self.use_att_loss and  self.cfg.mdl_to_use == 'retina':
             # self.loss_keys.append('att_ls')
             iou_annot_stage_0 = inp['iou_annot_stage_0']
             iou_annot_stage_1 = inp['iou_annot_stage_1']
