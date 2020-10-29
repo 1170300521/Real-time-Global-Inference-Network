@@ -20,16 +20,19 @@ class CollectDiffuseAttention(nn.Module):
         kc: n*b,h*w,d_o
         kd: n*b,h*w,d_o
         v: n*b,h*w,d_o
+        mask: n*b, 1, h*w
         '''
-
+        
         attn_col = torch.bmm(q, kc.transpose(1, 2)) #n*b,1,h*w
         attn_col_logit = attn_col / self.temperature
+        attn_col_logit = attn_col_logit if mask is None else attn_col_logit * mask
         attn_col = self.softmax(attn_col_logit)
         attn_col = self.dropout_c(attn_col)
         attn = torch.bmm(attn_col, v) #n*b,1,d_o
 
         attn_dif = torch.bmm(kd,q.transpose(1, 2)) #n*b,h*w,1
         attn_dif_logit = attn_dif / self.temperature
+        attn_dif_logit = attn_dif if mask is None else attn_dif_logit * mask
         attn_dif = F.sigmoid(attn_dif_logit)
         attn_dif= self.dropout_d(attn_dif)
         output=torch.bmm(attn_dif,attn)

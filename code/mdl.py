@@ -4,6 +4,7 @@ Author: Arka Sadhu
 """
 import torch
 import torch.nn as nn
+import numpy as np
 # import torch.nn.functional as F
 import torchvision.models as tvm
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
@@ -16,6 +17,8 @@ from dat_loader import get_data
 from afs import AdaptiveFeatureSelection
 from garan import GaranAttention
 from darknet import darknet53
+from controller import Controller
+from mask import mask_feat, logic_and
 
 # conv2d, conv2d_relu are adapted from
 # https://github.com/fastai/fastai/blob/5c4cefdeaf11fdbbdf876dbe37134c118dca03ad/fastai/layers.py#L98
@@ -109,13 +112,13 @@ class BackBone(nn.Module):
         return self.encoder(inp)
 
     def forward(self, inp, we=None,
-                only_we=False, only_grid=False):
+                only_we=False, only_grid=False, filt_dict=None):
         """
         expecting word embedding of shape B x WE.
         If only image features are needed, don't
         provide any word embedding
         """
-        feats,att_maps = self.encode_feats(inp,we)
+        feats,att_maps = self.encode_feats(inp,we, filt_dict=filt_dict)
         # If we want to do normalization of the features
         if self.cfg['do_norm']:
             feats = [
@@ -153,7 +156,7 @@ class RetinaBackBone(BackBone):
                 self.encoder.layer3[-1].conv3.out_channels,
                 self.encoder.layer4[-1].conv3.out_channels]
 
-    def encode_feats(self, inp,lang):
+    def encode_feats(self, inp,lang, filt_dict=None):
         x = self.encoder.conv1(inp)
         x = self.encoder.bn1(x)
         x = self.encoder.relu(x)
@@ -185,17 +188,30 @@ class SSDBackBone(BackBone):
 class YoloBackBone(BackBone):
     def after_init(self):
         self.num_chs = self.num_channels()
+        self.n_head = 4
         self.afs_stage=AdaptiveFeatureSelection(2, [256, 512], 0, [], self.num_chs[-1], 2048,512,1024).to(self.device)
 
-        self.garan_stage = GaranAttention(2048, 1024, n_head=4).to(self.device)
+        self.garan_stage = GaranAttention(2048, 1024, n_head=self.n_head).to(self.device)
     def num_channels(self):
         return [256, 512, 1024]
-    def encode_feats(self, inp,lang):
+    def encode_feats(self, inp,lang, filt_dict=None):
         x2, x3, x4 = self.encoder(inp)
         # print(lang.size())
-        
-        x_ = self.afs_stage(lang,[x2, x3, x4])
-        feats, E=self.garan_stage(lang,x_)
+        filter1 = filt_dict['f1']
+        filter2 = filt_dict['f2']
+        filter3 = filt_dict['f3']
+        rel_filter = filt_dict['rel']
+        B, T, _, _ = rel_filter.shape
+        x_, visual_feat = self.afs_stage(lang,[x2, x3, x4])
+
+        dup_feat = [f.squeeze().unsqueeze(1).expand(-1, T, -1, -1, -1) for f in visual_feat] # B*T*C*H*W
+        heat_map = (filter1*dup_feat[0] + filter2*dup_feat[1] + filter3*dup_feat[2]).sum(dim=2)  # B * T * H * W
+        masks = mask_feat(heat_map, rel_filter)  # B * T * H * W
+        mask = logic_and(masks).contiguous() # B * H * W
+        B, H, W = mask.shape
+        mask = mask.view(B, 1, H*W).expand(B, self.n_head, -1).contiguous().view(B*self.n_head, 1, H*W) 
+
+        feats, E=self.garan_stage(lang,x_, mask=mask)
 
         # Special case, the number of feature map is one.
         return [feats], [E]
@@ -265,6 +281,25 @@ class ZSGNet(nn.Module):
         else:
             self.gru = nn.GRU(self.emb_dim, self.lstm_dim, 
                                 bidirectional=self.bid, batch_first=False)
+        
+        if self.cfg.relation:
+            lstm_out_dim = self.lstm_dim * (self.bid + 1)
+            self.soft_parser = Controller(lstm_out_dim, self.cfg.T_obj) 
+            # object filter
+            self.k1 = nn.Linear(lstm_out_dim, self.img_dim)
+            self.k2 = nn.Linear(lstm_out_dim, self.img_dim)
+            self.k3 = nn.Linear(lstm_out_dim, self.img_dim)
+    
+            # relation kernel
+            self.kernel = nn.Sequential(
+                    nn.Linear(lstm_out_dim, int(lstm_out_dim/2)),
+                    nn.LeakyReLU(0.1, inplace=True),
+#                    nn.BatchNorm2d(int(lstm_out_dim/2)),
+                    nn.Linear(int(lstm_out_dim/2), 9),
+                    nn.LeakyReLU(0.1, inplace=True),
+#                    nn.BatchNorm2d(9),
+                    nn.Softmax(dim=1)
+                )
         self.after_init()
 
     def after_init(self):
@@ -373,11 +408,16 @@ class ZSGNet(nn.Module):
 
         qvec_out = word_embs.new_zeros(qvec_sorted.shape)
         qvec_out[perm_idx] = qvec_sorted
+        qvec_out = qvec_out.contiguous()
         # if full sequence is needed for future work
         if get_full_seq:
-            lstm_out_1 = lstm_out.transpose(1, 0).contiguous()
-            return lstm_out_1
-        return qvec_out.contiguous()
+            # get words mask
+            ids = torch.arange(max_qlen).unsqueeze(0).expand(bs, max_qlen).float().to(qvec_out.device)
+            att_mask = (ids < qlens.view(-1, 1)).float()
+            lstm_out_1 = lstm_out.transpose(1, 0)
+            lstm_out = lstm_out_1[perm_idx].contiguous()
+            return lstm_out, qvec_out, att_mask
+        return qvec_out
 
     def forward(self, inp: Dict[str, Any]):
         """
@@ -401,7 +441,25 @@ class ZSGNet(nn.Module):
         max_qlen = int(qlens.max().item())
         req_embs = inp1[:, :max_qlen, :].contiguous()
 
-        req_emb = self.apply_lstm(req_embs, qlens, max_qlen)
+        lstm_out, req_emb, att_mask = self.apply_lstm(req_embs, qlens, max_qlen, get_full_seq=self.cfg.relation)
+        
+        # get parser results
+        if self.cfg.relation:
+            _, sub_exp = self.soft_parser(lstm_out, req_emb, att_mask)
+            B, T, _ = sub_exp.shape
+            filter1 = self.k1(sub_exp).view(B, T, -1, 1, 1)
+            filter2 = self.k2(sub_exp).view(B, T, -1, 1, 1)
+            filter3 = self.k3(sub_exp).view(B, T, -1, 1, 1) # B * T * C
+            rel_filter = self.kernel(sub_exp) # B * T * k^2
+            B, T, k2 = rel_filter.shape
+            k = int(np.sqrt(k2))
+            rel_filter = rel_filter.view(B, T, k, k)
+            filt_dict = {
+                    "f1": filter1,
+                    "f2": filter2,
+                    "f3": filter3,
+                    "rel": rel_filter
+                    }
 
         # image blind
         if self.cfg['use_lang'] and not self.cfg['use_img']:
@@ -416,7 +474,8 @@ class ZSGNet(nn.Module):
             feat_out,E_attns = self.backbone(inp0, req_emb, only_grid=True)
         # see full language + image (happens by default)
         else:
-            feat_out,E_attns = self.backbone(inp0, req_emb)
+            feat_out,E_attns = self.backbone(inp0, req_emb, filt_dict=filt_dict)
+
 
         # Strategy depending on shared head or not
         if self.cfg['use_same_atb']:

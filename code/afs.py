@@ -28,6 +28,7 @@ class AdaptiveFeatureSelection(nn.Module):
             # print(visuals[i].size())
             visuals[i]=self.afs_modules[i](visuals[i]).unsqueeze(-1)
             # print(visuals[i].size())
+        visual_map = visuals
         v_size=visuals[0].size()
         visuals=torch.cat(visuals,-1).permute(0,4,1,2,3).contiguous().view(v_size[0],v_len,-1)
         # print(visuals.size())
@@ -36,7 +37,7 @@ class AdaptiveFeatureSelection(nn.Module):
         # print(weights.size())
         outputs=torch.bmm(weights,visuals).view(v_size[:-1])
         # print(outputs.size())
-        return outputs
+        return outputs, visual_map
 
 class FeatureNormalize(nn.Module):
     ''' FeatureNormalize '''
