@@ -250,7 +250,7 @@ class ImgQuDataset(Dataset):
                 image_fpath=trn_data.img_id.apply(lambda x: x))
             trn_df = trn_data[['image_fpath',
                                'x1', 'y1', 'x2', 'y2', 'query']]
-        elif self.ds_name == 'refcoco':
+        elif self.ds_name == 'refcoco' or self.ds_name == 'refcocog' or self.ds_name == 'refcoco+':
             trn_df = trn_data[['img_id',
                                 'x1', 'y1', 'x2', 'y2', 'query']]
         else :
