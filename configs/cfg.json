@@ -10,6 +10,7 @@
     "opt_fn_params": {
 	"betas": [0.9, 0.99]
     },
+    "visualize": false,
     "relation": true,
     "T_obj": 4,
     "do_norm": false,
@@ -19,7 +20,7 @@
     "lang_to_use": "gru", 
     "is_resize": true,
     "resize_img": [320, 320],
-    "tmp_path": "./tmp_wi_garan_flickr30k_att_loss",
+    "tmp_path": "./results/",
     "use_multi": true,
     "use_focal": true,
     "use_softmax": false,

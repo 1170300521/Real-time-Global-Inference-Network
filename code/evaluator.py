@@ -95,7 +95,10 @@ class Evaluator(nn.Module):
 
         reshaped_boxes = x1y1x2y2_to_y1x1y2x2(reshape(
             (pred_boxes + 1)/2, (inp['img_size'])))
+        resize_boxes = x1y1x2y2_to_y1x1y2x2(reshape(
+            (pred_boxes + 1)/2, (inp['img_resize'])))
         out_dict['pred_boxes'] = reshaped_boxes
+        out_dict['resize_boxes'] = resize_boxes
         out_dict['pred_scores'] = att_box_best
         # orig_annot = inp['orig_annot']
         # Sanity check

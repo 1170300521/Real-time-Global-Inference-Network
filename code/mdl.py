@@ -194,22 +194,24 @@ class YoloBackBone(BackBone):
         self.garan_stage = GaranAttention(2048, 1024, n_head=self.n_head).to(self.device)
     def num_channels(self):
         return [256, 512, 1024]
-    def encode_feats(self, inp,lang, filt_dict=None):
+    def encode_feats(self, inp, lang, filt_dict=None):
         x2, x3, x4 = self.encoder(inp)
-        # print(lang.size())
-        filter1 = filt_dict['f1']
-        filter2 = filt_dict['f2']
-        filter3 = filt_dict['f3']
-        rel_filter = filt_dict['rel']
-        B, T, _, _ = rel_filter.shape
         x_, visual_feat = self.afs_stage(lang,[x2, x3, x4])
-
-        dup_feat = [f.squeeze().unsqueeze(1).expand(-1, T, -1, -1, -1) for f in visual_feat] # B*T*C*H*W
-        heat_map = (filter1*dup_feat[0] + filter2*dup_feat[1] + filter3*dup_feat[2]).sum(dim=2)  # B * T * H * W
-        masks = mask_feat(heat_map, rel_filter)  # B * T * H * W
-        mask = logic_and(masks).contiguous() # B * H * W
-        B, H, W = mask.shape
-        mask = mask.view(B, 1, H*W).expand(B, self.n_head, -1).contiguous().view(B*self.n_head, 1, H*W) 
+        # print(lang.size())
+        mask = None
+        if filt_dict is not None:
+            filter1 = filt_dict['f1']
+            filter2 = filt_dict['f2']
+            filter3 = filt_dict['f3']
+            rel_filter = filt_dict['rel']
+            B, T, _, _ = rel_filter.shape
+    
+            dup_feat = [f.squeeze().unsqueeze(1).expand(-1, T, -1, -1, -1) for f in visual_feat] # B*T*C*H*W
+            heat_map = (filter1*dup_feat[0] + filter2*dup_feat[1] + filter3*dup_feat[2]).sum(dim=2)  # B * T * H * W
+            masks = mask_feat(heat_map, rel_filter)  # B * T * H * W
+            mask = logic_and(masks).contiguous() # B * H * W
+            B, H, W = mask.shape
+            mask = mask.view(B, 1, H*W).expand(B, self.n_head, -1).contiguous().view(B*self.n_head, 1, H*W) 
 
         feats, E=self.garan_stage(lang,x_, mask=mask)
 
@@ -441,9 +443,13 @@ class ZSGNet(nn.Module):
         max_qlen = int(qlens.max().item())
         req_embs = inp1[:, :max_qlen, :].contiguous()
 
-        lstm_out, req_emb, att_mask = self.apply_lstm(req_embs, qlens, max_qlen, get_full_seq=self.cfg.relation)
+        if self.cfg.relation:
+            lstm_out, req_emb, att_mask = self.apply_lstm(req_embs, qlens, max_qlen, get_full_seq=True)
+        else:
+            req_emb = self.apply_lstm(req_embs, qlens, max_qlen, get_full_seq=False)
         
         # get parser results
+        filt_dict = None
         if self.cfg.relation:
             _, sub_exp = self.soft_parser(lstm_out, req_emb, att_mask)
             B, T, _ = sub_exp.shape

@@ -200,6 +200,7 @@ class ImgQuDataset(Dataset):
             'bboxs': torch.from_numpy(rstarget).float(),
             'orig_annot': torch.tensor(annot).float(),
             'img_size': torch.tensor([h, w]),
+            'img_resize': torch.tensor(self.cfg.resize_img),
             'sents': sents,
             'iou_annot_stage_0':torch.tensor(iou_annot_stage_0).float(),
             'iou_annot_stage_1': torch.tensor(iou_annot_stage_1).float(),

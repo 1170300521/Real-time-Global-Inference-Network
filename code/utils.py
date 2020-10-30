@@ -4,6 +4,7 @@ Utility functions
 from typing import Dict, List, Optional, Union, Any, Callable
 import math
 import torch
+import os
 import os.path as osp
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
@@ -284,6 +285,8 @@ class Learner:
         self.visualize_dir = Path(
             self.data.path) / 'visualize'/ f'{self.uid}'
 
+        if not os.path.exists(self.visualize_dir):
+            os.makedirs(self.visualize_dir)
         self.create_log_dirs()
 
     @exec_func_if_main_proc
@@ -358,12 +361,14 @@ class Learner:
                     for ind in range(num_preds)]
         return out_list
 
-    def visualize(self, out, batch):
+    def visualize(self, out, batch, pred):
         att_maps = out['att_maps'][0]
         imgs = batch['img']
         idxs = batch['idxs']
         bboxs = batch['bboxs']
         sents = batch['sents']
+        pred_bboxs = pred['resize_boxes']
+        scores = pred['pred_scores']
         
         for i in range(len(idxs)):
             filename = osp.join(self.visualize_dir, 'epoch_{}_{}.jpg'.format(self.num_epoch,idxs[i].item()))
@@ -372,14 +377,20 @@ class Learner:
             feat = (feat-feat.min())/(feat.max()-feat.min() + 1e-5)
             img = imgs[i].cpu().permute(1,2,0).numpy()
             bbox = bboxs[i].cpu().numpy()
+            pbbox = pred_bboxs[i]
             ax1.imshow(img, interpolation='bilinear')
             h = abs(bbox[2] - bbox[0])
             w = abs(bbox[3] - bbox[1])
-            rect = patches.Rectangle((bbox[1],bbox[0]),w,h,linewidth=1,edgecolor='g',facecolor='none')
-            ax1.add_patch(rect)
+            p_w = abs(pbbox[3] - pbbox[1])
+            p_h = abs(pbbox[2] - pbbox[0])
+            gt_rect = patches.Rectangle((bbox[1],bbox[0]),w,h,linewidth=1,edgecolor='g',facecolor='none')
+            pred_rect = patches.Rectangle((pbbox[1],pbbox[0]),p_w,p_h,linewidth=1,edgecolor='r',facecolor='none')
+            ax1.add_patch(gt_rect)
+            ax1.add_patch(pred_rect)
             ax2.imshow(feat, cmap='viridis', interpolation='bilinear')
-            fig.text(0, 0, sents[i])
-            plt.show()
+            fig.text(0, 0, sents[i] + "   Score: {}".format(scores[i]))
+            plt.savefig(filename)
+            plt.close()
 
 
 
@@ -412,14 +423,13 @@ class Learner:
                 prediction_dict = {
                     'id': metric['idxs'].tolist(),
                     'pred_boxes': metric['pred_boxes'].tolist(),
+                    'resize_boxes': metric['resize_boxes'].tolist(),
                     'pred_scores': metric['pred_scores'].tolist()
                 }
                 predicted_box_dict_list += self.get_predictions_list(
                     prediction_dict)
-                break
-            # visualize att map
-            if self.cfg.only_val:
-                self.visualize(out, batch)
+                if self.cfg.only_val:
+                    self.visualize(out, batch, prediction_dict)
             nums = torch.tensor(nums).float().to(self.device)
             tot_nums = nums.sum()
             val_loss = compute_avg_dict(val_losses, nums)
