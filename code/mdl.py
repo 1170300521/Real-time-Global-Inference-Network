@@ -118,7 +118,7 @@ class BackBone(nn.Module):
         If only image features are needed, don't
         provide any word embedding
         """
-        feats,att_maps = self.encode_feats(inp,we, filt_dict=filt_dict)
+        feats, reg_feat, att_maps = self.encode_feats(inp,we, filt_dict=filt_dict)
         # If we want to do normalization of the features
         if self.cfg['do_norm']:
             feats = [
@@ -137,7 +137,7 @@ class BackBone(nn.Module):
         out = [self.concat_we(
             f, we, only_we=only_we, only_grid=only_grid) for f in feats]
 
-        return out,att_maps
+        return out, reg_feat, att_maps
 
 
 class RetinaBackBone(BackBone):
@@ -216,7 +216,7 @@ class YoloBackBone(BackBone):
         feats, E=self.garan_stage(lang,x_, mask=mask)
 
         # Special case, the number of feature map is one.
-        return [feats], [E]
+        return [feats], [torch.cat(visual_feat, 1).squeeze()], [E]
 
 
 class ZSGNet(nn.Module):
@@ -275,7 +275,7 @@ class ZSGNet(nn.Module):
             self.att_box = self._head_subnet(
                 1, self.n_anchors, -4., start_dim_head=self.start_dim_head)
             self.reg_box = self._head_subnet(
-                4, self.n_anchors, start_dim_head=self.start_dim_head)
+                4, self.n_anchors, start_dim_head=self.img_dim * 3)
 
         if self.is_lstm:
             self.lstm = nn.LSTM(self.emb_dim, self.lstm_dim,
@@ -480,7 +480,7 @@ class ZSGNet(nn.Module):
             feat_out,E_attns = self.backbone(inp0, req_emb, only_grid=True)
         # see full language + image (happens by default)
         else:
-            feat_out,E_attns = self.backbone(inp0, req_emb, filt_dict=filt_dict)
+            feat_out,reg_feat, E_attns = self.backbone(inp0, req_emb, filt_dict=filt_dict)
 
 
         # Strategy depending on shared head or not
@@ -495,7 +495,7 @@ class ZSGNet(nn.Module):
                  for feature in feat_out], dim=1)
             bbx_out = torch.cat(
                 [self.permute_correctly(self.reg_box(feature), 4)
-                 for feature in feat_out], dim=1)
+                 for feature in reg_feat], dim=1)
 
         feat_sizes = torch.tensor([[f.size(2), f.size(3)]
                                    for f in feat_out]).to(self.device)
