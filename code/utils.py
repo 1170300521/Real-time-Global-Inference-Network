@@ -361,8 +361,21 @@ class Learner:
                     for ind in range(num_preds)]
         return out_list
 
+    def _norm(self, feat): 
+        return (feat-feat.min())/(feat.max()-feat.min() + 1e-5)
+
     def visualize(self, out, batch, pred):
+        """
+        visualization order is as following:
+        --------|--------
+        img      sub_map
+        --------|--------
+        obj_map   final
+        """
+
         att_maps = out['att_maps'][0]
+        sub_maps = out['sub_maps'][0]
+        obj_maps = out['obj_maps'][0]
         imgs = batch['img']
         idxs = batch['idxs']
         bboxs = batch['bboxs']
@@ -372,22 +385,24 @@ class Learner:
         
         for i in range(len(idxs)):
             filename = osp.join(self.visualize_dir, 'epoch_{}_{}.jpg'.format(self.num_epoch,idxs[i].item()))
-            fig, (ax1, ax2) = plt.subplots(1, 2)
+            fig, ax = plt.subplots(2, 2)
             feat = att_maps[i].cpu().numpy()
-            feat = (feat-feat.min())/(feat.max()-feat.min() + 1e-5)
+            feat = self._norm(feat)
             img = imgs[i].cpu().permute(1,2,0).numpy()
             bbox = bboxs[i].cpu().numpy()
             pbbox = pred_bboxs[i]
-            ax1.imshow(img, interpolation='bilinear')
+            ax[0].imshow(img, interpolation='bilinear')
             h = abs(bbox[2] - bbox[0])
             w = abs(bbox[3] - bbox[1])
             p_w = abs(pbbox[3] - pbbox[1])
             p_h = abs(pbbox[2] - pbbox[0])
             gt_rect = patches.Rectangle((bbox[1],bbox[0]),w,h,linewidth=1,edgecolor='g',facecolor='none')
             pred_rect = patches.Rectangle((pbbox[1],pbbox[0]),p_w,p_h,linewidth=1,edgecolor='r',facecolor='none')
-            ax1.add_patch(gt_rect)
-            ax1.add_patch(pred_rect)
-            ax2.imshow(feat, cmap='viridis', interpolation='bilinear')
+            ax[0].add_patch(gt_rect)
+            ax[0].add_patch(pred_rect)
+            ax[1].imshow(sub_feat, cmap='viridis', interpolation='bilinear')
+            ax[2].imshow(obj_feat, cmap='viridis', interpolation='bilinear')
+            ax[3].imshow(feat, cmap='viridis', interpolation='bilinear')
             fig.text(0, 0, sents[i] + "   Score: {}".format(scores[i]))
             plt.savefig(filename)
             plt.close()
