@@ -208,15 +208,17 @@ class YoloBackBone(BackBone):
     
             dup_feat = [f.squeeze().unsqueeze(1).expand(-1, T, -1, -1, -1) for f in visual_feat] # B*T*C*H*W
             heat_map = (filter1*dup_feat[0] + filter2*dup_feat[1] + filter3*dup_feat[2]).sum(dim=2)  # B * T * H * W
-            masks = mask_feat(heat_map, rel_filter)  # B * T * H * W
+            masks = mask_feat(heat_map, rel_filter, self.cfg.T_trans)  # B * T * H * W
             mask = logic_and(masks).contiguous() # B * H * W
+            obj_map = mask
             B, H, W = mask.shape
             mask = mask.view(B, 1, H*W).expand(B, self.n_head, -1).contiguous().view(B*self.n_head, 1, H*W) 
+            mask = torch.sigmoid(mask)
 
-        feats, E=self.garan_stage(lang,x_, mask=mask)
+        feats, E, sub_E=self.garan_stage(lang,x_, mask=mask)
 
         # Special case, the number of feature map is one.
-        return [feats], [torch.cat(visual_feat, 1).squeeze()], [E]
+        return [feats], [torch.cat(visual_feat, 1).squeeze()], {'att_maps': [E], 'obj_maps': [obj_map], 'sub_maps': [sub_E]}
 
 
 class ZSGNet(nn.Module):
@@ -393,7 +395,6 @@ class ZSGNet(nn.Module):
         packed_embed_inp = pack_padded_sequence(
             embeds, lengths=qlens1, batch_first=False)
         # To ensure no pains with DataParallel
-        # self.lstm.flatten_parameters()
         if self.is_lstm:
             lstm_out1, (self.hidden, _) = self.lstm(packed_embed_inp, self.hidden)
         else:
@@ -508,7 +509,9 @@ class ZSGNet(nn.Module):
         out_dict['bbx_out'] = bbx_out
         out_dict['feat_sizes'] = feat_sizes
         out_dict['num_f_out'] = num_f_out
-        out_dict['att_maps'] = E_attns
+        out_dict['att_maps'] = E_attns['att_maps']
+        out_dict['obj_maps'] = E_attns['obj_maps']
+        out_dict['sub_maps'] = E_attns['sub_maps']
         return out_dict
 
 

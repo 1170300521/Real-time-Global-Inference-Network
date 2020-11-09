@@ -364,7 +364,7 @@ class Learner:
     def _norm(self, feat): 
         return (feat-feat.min())/(feat.max()-feat.min() + 1e-5)
 
-    def visualize(self, out, batch, pred):
+    def visualize(self, out, batch, pred, norm=True):
         """
         visualization order is as following:
         --------|--------
@@ -385,9 +385,18 @@ class Learner:
         
         for i in range(len(idxs)):
             filename = osp.join(self.visualize_dir, 'epoch_{}_{}.jpg'.format(self.num_epoch,idxs[i].item()))
+            # get subplots to present featmaps
             fig, ax = plt.subplots(2, 2)
+            ax = ax.flatten()
+
+            # get final & subject & object feature map
             feat = att_maps[i].cpu().numpy()
-            feat = self._norm(feat)
+            sub_feat = sub_maps[i].cpu().numpy()
+            obj_feat = obj_maps[i].cpu().numpy()
+            if norm:
+                feat = self._norm(feat)
+                sub_feat = self._norm(sub_feat)
+                obj_feat = self._norm(obj_feat)
             img = imgs[i].cpu().permute(1,2,0).numpy()
             bbox = bboxs[i].cpu().numpy()
             pbbox = pred_bboxs[i]

@@ -48,12 +48,12 @@ class Controller(nn.Module):
             cq_i_reshape = cq_i.unsqueeze(1).expand(-1, lstm_seq.size(1), -1)
             interactions = cq_i_reshape * lstm_seq
             interactions = torch.cat([interactions, lstm_seq], dim=2)
-            interactions = F.tanh(self.fc3(interactions))
+            interactions = torch.tanh(self.fc3(interactions))
 
             logits = self.fc2(interactions).squeeze(2)
             mask = (1.0 - attn_mask.float()) * (-1e30)
             logits = logits + mask
-            logits = F.softmax(logits, dim=1)
+            logits = torch.softmax(logits, dim=1)
             norm_cv_i = logits * attn_mask.float()
             norm_cv_i_sum = torch.sum(norm_cv_i, dim=1).unsqueeze(1).expand(logits.size(0), logits.size(1))
             norm_cv_i[norm_cv_i_sum != 0] = norm_cv_i[norm_cv_i_sum != 0] / norm_cv_i_sum[norm_cv_i_sum != 0]

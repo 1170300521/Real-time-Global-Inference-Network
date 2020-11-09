@@ -16,27 +16,29 @@ class CollectDiffuseAttention(nn.Module):
 
     def forward(self, q, kc,kd, v, mask=None):
         '''
-        q: n*b,1,d_o
-        kc: n*b,h*w,d_o
-        kd: n*b,h*w,d_o
-        v: n*b,h*w,d_o
-        mask: n*b, 1, h*w
+        q: b*n,1,d_o
+        kc: b*n,h*w,d_o
+        kd: b*n,h*w,d_o
+        v: b*n,h*w,d_o
+        mask: b*n, 1, h*w
         '''
         
-        attn_col = torch.bmm(q, kc.transpose(1, 2)) #n*b,1,h*w
-        attn_col_logit = attn_col / self.temperature
-        attn_col_logit = attn_col_logit if mask is None else attn_col_logit * mask
+        attn_col = torch.bmm(q, kc.transpose(1, 2)) #b*n,1,h*w
+        sub_attn_col_logit = attn_col / self.temperature
+        attn_col_logit = sub_attn_col_logit if mask is None else sub_attn_col_logit * mask
         attn_col = self.softmax(attn_col_logit)
         attn_col = self.dropout_c(attn_col)
-        attn = torch.bmm(attn_col, v) #n*b,1,d_o
+        attn = torch.bmm(attn_col, v) #b*n,1,d_o
 
-        attn_dif = torch.bmm(kd,q.transpose(1, 2)) #n*b,h*w,1
+        attn_dif = torch.bmm(kd,q.transpose(1, 2)) #b*n,h*w,1
+        T_mask = None if mask is None else mask.transpose(1,2).contiguous()
         attn_dif_logit = attn_dif / self.temperature
-        attn_dif_logit = attn_dif if mask is None else attn_dif_logit * mask
-        attn_dif = F.sigmoid(attn_dif_logit)
+        attn_dif_logit = attn_dif if T_mask is None else attn_dif_logit * T_mask
+        attn_dif = torch.sigmoid(attn_dif_logit)
         attn_dif= self.dropout_d(attn_dif)
         output=torch.bmm(attn_dif,attn)
-        return output, attn_col_logit.squeeze(1)
+        return output, attn_col_logit.squeeze(1), sub_attn_col_logit.squeeze(1)
+
 class GaranAttention(nn.Module):
     ''' GaranAttention module '''
 
@@ -89,17 +91,21 @@ class GaranAttention(nn.Module):
         kd=kd.permute(0,1,3,2).contiguous().view(-1, h_v*w_v, d_o//n_head) # (n*b) x lk x dk
         v = v.permute(0,1,3,2).contiguous().view(-1, h_v*w_v, d_o//n_head) # (n*b) x lv x dv
 
-        output, attn = self.attention(q, kc,kd, v)
+        output, attn, sub_attn = self.attention(q, kc,kd, v, mask=mask)
         #n * b, h * w, d_o
         output = output.view(sz_b,n_head, h_v,w_v, d_o//n_head)
         output = output.permute(0,1,4,3,2).contiguous().view(sz_b,-1, h_v,w_v) # b x lq x (n*dv)
         attn=attn.view(sz_b,n_head, h_v,w_v)
         attn=attn.mean(1)
+        sub_attn = sub_attn.view(sz_b, n_head, h_v, w_v)
+        sub_attn = sub_attn.mean(1)
         #residual connect
         output= output+residual
         output=self.layer_norm(output)
         output=self.layer_acti(output)
 
         # output = self.dropout(self.fc(output))
-
-        return output, attn
+        if mask is None:
+            return output, attn
+        else:
+            return output, attn, sub_attn

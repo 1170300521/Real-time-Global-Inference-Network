@@ -13,6 +13,7 @@
     "visualize": false,
     "relation": true,
     "T_obj": 4,
+    "T_trans": 5,
     "do_norm": false,
     "use_same_atb": true,
     "use_att_loss": true,

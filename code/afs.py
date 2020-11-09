@@ -1,7 +1,6 @@
 import torch.nn as nn
 import torch
 import torch.utils.model_zoo as model_zoo
-import torch.nn.functional as F
 import numpy as np
 
 class AdaptiveFeatureSelection(nn.Module):
@@ -33,7 +32,7 @@ class AdaptiveFeatureSelection(nn.Module):
         visuals=torch.cat(visuals,-1).permute(0,4,1,2,3).contiguous().view(v_size[0],v_len,-1)
         # print(visuals.size())
         weights=self.afs_weights(lang)
-        weights=F.softmax(weights,dim=-1).unsqueeze(1)
+        weights=torch.softmax(weights,dim=-1).unsqueeze(1)
         # print(weights.size())
         outputs=torch.bmm(weights,visuals).view(v_size[:-1])
         # print(outputs.size())

@@ -1,7 +1,7 @@
 import torch
 
 
-def mask_feat(feat, mask, s=1):
+def _mask_feat(feat, mask, s=1):
     mask_feat = torch.zeros_like(feat)
     d = mask.shape[2]
     r = int(d / 2)
@@ -23,6 +23,11 @@ def mask_feat(feat, mask, s=1):
             mask_feat[..., x_min:x_max+1, y_min:y_max+1] += feat[..., i, j].view(b, t, 1, 1) * mask[:, :, m_x_min:m_x_max, m_y_min:m_y_max]
     return mask_feat+feat
 
+def mask_feat(feat, mask, T, s=1):
+    for i in range(T):
+        feat = _mask_feat(feat, mask, s=s)
+    return feat
+
 def logic_and(masks):
     """
     masks: a tensor whose shape is B * T * H * W
@@ -33,7 +38,7 @@ def logic_and(masks):
     B, T, H, W = masks.shape
     mask_0 = masks[:, 0]
     for i in range(1, T):
-        mask_0 *= masks[:, i]
+        mask_0 = mask_0 * masks[:, i]
     return mask_0
 
 if __name__ == "__main__":
