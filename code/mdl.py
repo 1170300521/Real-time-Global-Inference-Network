@@ -192,8 +192,20 @@ class YoloBackBone(BackBone):
         self.afs_stage=AdaptiveFeatureSelection(2, [256, 512], 0, [], self.num_chs[-1], 2048,512,1024).to(self.device)
 
         self.garan_stage = GaranAttention(2048, 1024, n_head=self.n_head).to(self.device)
+        self.norm = nn.LayerNorm((int(self.cfg.resize_img[0]/32), int(self.cfg.resize_img[1]/32)))
+
     def num_channels(self):
         return [256, 512, 1024]
+
+    def _norm(self, feat):
+        B, H, W = feat.shape
+        feat = feat.view(B, H*W)
+        feat.clamp_(-1e4, 1e4)
+        Min = torch.min(feat, dim=1, keepdim=True)[0]
+        Max = torch.max(feat, dim=1, keepdim=True)[0]
+        feat = (feat - Min) / (Max - Min + 1e-5) - 0.5
+        return feat.view(B, H, W) * 3
+
     def encode_feats(self, inp, lang, filt_dict=None):
         x2, x3, x4 = self.encoder(inp)
         x_, visual_feat = self.afs_stage(lang,[x2, x3, x4])
@@ -212,12 +224,15 @@ class YoloBackBone(BackBone):
             mask = logic_and(masks).contiguous() # B * H * W
             obj_map = mask
             B, H, W = mask.shape
+            mask = torch.sigmoid(self._norm(mask))
+#            print(mask.max())
             mask = mask.view(B, 1, H*W).expand(B, self.n_head, -1).contiguous().view(B*self.n_head, 1, H*W) 
-            mask = torch.sigmoid(mask)
 
         feats, E, sub_E=self.garan_stage(lang,x_, mask=mask)
 
         # Special case, the number of feature map is one.
+#        print("E:\n", E)
+#        print("sub_E:\n", sub_E)
         return [feats], [torch.cat(visual_feat, 1).squeeze()], {'att_maps': [E], 'obj_maps': [obj_map], 'sub_maps': [sub_E]}
 
 
@@ -298,10 +313,10 @@ class ZSGNet(nn.Module):
             self.kernel = nn.Sequential(
                     nn.Linear(lstm_out_dim, int(lstm_out_dim/2)),
                     nn.LeakyReLU(0.1, inplace=True),
-#                    nn.BatchNorm2d(int(lstm_out_dim/2)),
+#                    nn.BatchNorm1d(int(lstm_out_dim/2)),
                     nn.Linear(int(lstm_out_dim/2), 9),
                     nn.LeakyReLU(0.1, inplace=True),
-#                    nn.BatchNorm2d(9),
+#                    nn.BatchNorm1d(9),
                     nn.Softmax(dim=1)
                 )
         self.after_init()
