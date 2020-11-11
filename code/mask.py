@@ -22,6 +22,7 @@ def _mask_feat(feat, mask, s=1):
             #mask_feat[..., x_min:x_max+1, y_min:y_max+1] += feat[..., i, j].view(b, t, 1, 1) * mask[m_x_min:m_x_max, m_y_min:m_y_max].view(1,1, dx, dy).expand(b,t,dx,dy)
             mask_feat[..., x_min:x_max+1, y_min:y_max+1] += feat[..., i, j].view(b, t, 1, 1) * mask[:, :, m_x_min:m_x_max, m_y_min:m_y_max]
     return mask_feat+feat
+#    return torch.max(mask_feat, feat)
 
 def mask_feat(feat, mask, T, s=1):
     for i in range(T):
