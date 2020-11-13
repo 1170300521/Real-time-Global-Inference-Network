@@ -416,10 +416,9 @@ class Learner:
                 }
                 predicted_box_dict_list += self.get_predictions_list(
                     prediction_dict)
-                break
-            # visualize att map
-            if self.cfg.only_val:
-                self.visualize(out, batch)
+                # visualize att map
+                if self.cfg.visualize:
+                    self.visualize(out, batch)
             nums = torch.tensor(nums).float().to(self.device)
             tot_nums = nums.sum()
             val_loss = compute_avg_dict(val_losses, nums)

@@ -375,8 +375,8 @@ class ZSGNet(nn.Module):
         qvec_out[perm_idx] = qvec_sorted
         # if full sequence is needed for future work
         if get_full_seq:
-            lstm_out_1 = lstm_out.transpose(1, 0).contiguous()
-            return lstm_out_1
+            lstm_out_1 = lstm_out.transpose(1, 0).contiguous()  # seq_len * batch * (num_directions * hidden_size)
+            return lstm_out_1.mean(1)
         return qvec_out.contiguous()
 
     def forward(self, inp: Dict[str, Any]):
@@ -401,7 +401,7 @@ class ZSGNet(nn.Module):
         max_qlen = int(qlens.max().item())
         req_embs = inp1[:, :max_qlen, :].contiguous()
 
-        req_emb = self.apply_lstm(req_embs, qlens, max_qlen)
+        req_emb = self.apply_lstm(req_embs, qlens, max_qlen, get_full_seq=False)
 
         # image blind
         if self.cfg['use_lang'] and not self.cfg['use_img']:
