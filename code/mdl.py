@@ -182,6 +182,32 @@ class SSDBackBone(BackBone):
         return self.encoder(inp)
 
 
+class BaseBackBone(BackBone):
+    def after_init(self):
+        self.num_chs = self.num_channels()
+#        self.afs_stage=AdaptiveFeatureSelection(2, [256, 512], 0, [], self.num_chs[-1], 2048,512,1024).to(self.device)
+#
+#        self.garan_stage = GaranAttention(2048, 1024, n_head=4).to(self.device)
+        self.sigma = nn.LeakyReLU(0.1)
+        self.W_v = nn.Linear(1024, 1024, bias=False)
+        self.W_t = nn.Linear(1024 * 2, 1024, bias=False)
+    def num_channels(self):
+        return [256, 512, 1024]
+    def encode_feats(self, inp,lang):
+        x2, x3, x4 = self.encoder(inp)
+        x4 = x4.permute(0, 2, 3, 1)
+        x4 = self.W_v(x4).permute(0, 3, 1, 2)
+        bs, dim = lang.shape
+        lang = self.W_t(lang).view(bs, -1, 1, 1)
+        return [self.sigma(x4)*self.sigma(lang)], []
+        # print(lang.size())
+        
+#        x_ = self.afs_stage(lang,[x2, x3, x4])
+#        feats, E=self.garan_stage(lang,x_)
+
+        # Special case, the number of feature map is one.
+
+
 class YoloBackBone(BackBone):
     def after_init(self):
         self.num_chs = self.num_channels()
@@ -464,6 +490,9 @@ def get_default_net(num_anchors=1, cfg=None):
     elif cfg['mdl_to_use'] == 'realgin':
         encoder = darknet53(True)
         backbone = YoloBackBone(encoder, cfg)
+    elif cfg['mdl_to_use'] == 'baseline':
+        encoder = darknet53(True)
+        backbone = BaseBackBone(encoder, cfg)
 
     zsg_net = ZSGNet(backbone, num_anchors, cfg=cfg)
     return zsg_net

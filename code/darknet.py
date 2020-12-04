@@ -353,3 +353,9 @@ def darknet53(load_weights, config_path="./configs/yolov3.cfg", weights_path="./
     if load_weights:
         model.load_darknet_weights(weights_path)
     return model
+
+
+if __name__ == "__main__":
+    model = darknet53(False)
+    img = torch.ones(16, 3, 320, 320)
+    model(img)

@@ -166,8 +166,8 @@ class ImgQuDataset(Dataset):
             target[2] / h, target[3] / w
         ])
 
+        rstarget=target*self.cfg.resize_img[0]
         if self.cfg['use_att_loss']:
-            rstarget=target*self.cfg.resize_img[0]
             iou_annot_stage_0=generate_iou_groundtruth([self.cfg.resize_img[0]//8,self.cfg.resize_img[0]//8],
                                                        [(rstarget[0]+rstarget[2])/16,(rstarget[1]+rstarget[3])/16],
                                                        [(rstarget[2]-rstarget[0])/16,(rstarget[3]-rstarget[1])/16])
