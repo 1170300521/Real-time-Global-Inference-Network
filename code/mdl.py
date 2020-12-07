@@ -465,6 +465,9 @@ def get_default_net(num_anchors=1, cfg=None):
         encoder = darknet53(True)
         backbone = YoloBackBone(encoder, cfg)
 
+    # Freeze visual backbone params
+    for param in backbone.parameters():
+        param.requires_grad = False
     zsg_net = ZSGNet(backbone, num_anchors, cfg=cfg)
     return zsg_net
 
