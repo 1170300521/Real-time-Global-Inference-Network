@@ -29,7 +29,7 @@ def conv2d(ni: int, nf: int, ks: int = 3, stride: int = 1,
 
 
 def conv2d_relu(ni: int, nf: int, ks: int = 3, stride: int = 1, padding: int = None,
-                bn: bool = False, bias: bool = False) -> nn.Sequential:
+                bn: bool = True, bias: bool = False) -> nn.Sequential:
     """
     Create a `conv2d` layer with `nn.ReLU` activation
     and optional(`bn`) `nn.BatchNorm2d`: `ni` input, `nf` out
@@ -189,14 +189,21 @@ class BaseBackBone(BackBone):
 #
 #        self.garan_stage = GaranAttention(2048, 1024, n_head=4).to(self.device)
         self.sigma = nn.LeakyReLU(0.1)
-        self.W_v = nn.Linear(1024, 1024, bias=False)
+        #self.W_v = nn.Linear(1024, 1024, bias=False)
+        self.W_v = nn.Conv2d(1024, 1024, 1, bias=False)
         self.W_t = nn.Linear(1024 * 2, 1024, bias=False)
+        self.bn = True
+        self.batchnorm = nn.BatchNorm2d(1024)
+
     def num_channels(self):
         return [256, 512, 1024]
     def encode_feats(self, inp,lang):
         x2, x3, x4 = self.encoder(inp)
-        x4 = x4.permute(0, 2, 3, 1)
-        x4 = self.W_v(x4).permute(0, 3, 1, 2)
+#        x4 = x4.permute(0, 2, 3, 1)
+#        x4 = self.W_v(x4).permute(0, 3, 1, 2)
+        x4 = self.W_v(x4)
+        if self.bn:
+            x4 = self.batchnorm(x4)
         bs, dim = lang.shape
         lang = self.W_t(lang).view(bs, -1, 1, 1)
         return [self.sigma(x4)*self.sigma(lang)], []
@@ -488,10 +495,10 @@ def get_default_net(num_anchors=1, cfg=None):
         backbone = SSDBackBone(encoder, cfg)
         # backbone = encoder
     elif cfg['mdl_to_use'] == 'realgin':
-        encoder = darknet53(True)
+        encoder = darknet53(True, is_freeze=cfg.freeze_backbone)
         backbone = YoloBackBone(encoder, cfg)
     elif cfg['mdl_to_use'] == 'baseline':
-        encoder = darknet53(True)
+        encoder = darknet53(True, is_freeze=cfg.freeze_backbone)
         backbone = BaseBackBone(encoder, cfg)
 
     zsg_net = ZSGNet(backbone, num_anchors, cfg=cfg)

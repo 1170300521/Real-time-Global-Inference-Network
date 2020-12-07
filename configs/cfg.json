@@ -11,6 +11,7 @@
 	"betas": [0.9, 0.99]
     },
     "do_norm": false,
+    "freeze_backbone": true,
     "use_same_atb": true,
     "use_att_loss": true,
     "mdl_to_use": "retina",

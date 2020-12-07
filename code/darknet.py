@@ -348,10 +348,12 @@ class Darknet(nn.Module):
 
         fp.close()
 
-def darknet53(load_weights, config_path="./configs/yolov3.cfg", weights_path="./weights/yolov3.weights", img_size=416):
+def darknet53(load_weights, is_freeze=True, config_path="./configs/yolov3.cfg", weights_path="./weights/yolov3.weights", img_size=416):
     model = Darknet(config_path, img_size)
     if load_weights:
         model.load_darknet_weights(weights_path)
+    for param in model.parameters():
+        param.requries_grad=not is_freeze
     return model
 
 
