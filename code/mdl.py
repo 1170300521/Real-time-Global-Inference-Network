@@ -202,6 +202,7 @@ class BaseBackBone(BackBone):
 #        self.W_m3 = conv2d(1024 * 2, 1024, 1, 1, bias=False)
 #        self.W_m4 = conv2d(1024 * 2, 1024, 1, 1, bias=False)
 #        self.downsample = nn.MaxPool2d(2)
+        self.garan_stage = GaranAttention(2048, 1024, n_head=4)
         self.bn = False
         if self.bn:
             self.batchnorm = nn.BatchNorm2d(1024)
@@ -231,9 +232,10 @@ class BaseBackBone(BackBone):
         if self.bn:
             x4 = self.batchnorm(x4)
         x4 = self.sigma(x4) * ft
+        feat, E = self.garan_stage(lang, x4)
 #        lang = self.W_t(lang).view(bs, -1, 1, 1)
 #        return [self.sigma(x4)*self.sigma(lang)], []
-        return [x4], []
+        return [feat], [E]
 
 
 class YoloBackBone(BackBone):

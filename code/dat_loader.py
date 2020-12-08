@@ -123,8 +123,8 @@ class ImgQuDataset(Dataset):
         self.img_dir = Path(self.cfg.ds_info[self.ds_name]['img_dir'])
         self.phrase_len = 50
         self.item_getter = getattr(self, 'simple_item_getter')
-        # normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-        # std=[0.229, 0.224, 0.225])
+        self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                              std=[0.229, 0.224, 0.225])
 
     def __len__(self):
         return len(self.image_data)
@@ -191,6 +191,7 @@ class ImgQuDataset(Dataset):
         # img = self.img_transforms(img)
         # img = Image(pil2tensor(img, np.float_).float().div_(255))
         img = pil2tensor(img, np.float_).float().div_(255)
+        img = self.normalization(img)
         out = {
             'img': img,
             'idxs': torch.tensor(idx).long(),
