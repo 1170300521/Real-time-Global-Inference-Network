@@ -29,7 +29,7 @@ def conv2d(ni: int, nf: int, ks: int = 3, stride: int = 1,
 
 
 def conv2d_relu(ni: int, nf: int, ks: int = 3, stride: int = 1, padding: int = None,
-                bn: bool = True, bias: bool = False) -> nn.Sequential:
+                bn: bool = False, bias: bool = False) -> nn.Sequential:
     """
     Create a `conv2d` layer with `nn.ReLU` activation
     and optional(`bn`) `nn.BatchNorm2d`: `ni` input, `nf` out
@@ -189,30 +189,51 @@ class BaseBackBone(BackBone):
 #
 #        self.garan_stage = GaranAttention(2048, 1024, n_head=4).to(self.device)
         self.sigma = nn.LeakyReLU(0.1)
-        #self.W_v = nn.Linear(1024, 1024, bias=False)
-        self.W_v = nn.Conv2d(1024, 1024, 1, bias=False)
-        self.W_t = nn.Linear(1024 * 2, 1024, bias=False)
-        self.bn = True
-        self.batchnorm = nn.BatchNorm2d(1024)
+        # self.W_v = nn.Linear(1024, 1024, bias=False)
+        # self.W_v = nn.Conv2d(1024, 1024, 1, bias=True)
+#        self.W_v2 = nn.Conv2d(256, 1024, 1, bias=False)
+#        self.W_v3 = nn.Conv2d(512, 1024, 1, bias=False)
+#        self.W_v4 = nn.Conv2d(1024, 1024, 1, bias=False)
+        self.W_v = nn.Conv2d(1024, 1024, 1, bias=True)
+        self.W_t = nn.Linear(1024 * 2, 1024, bias=True)
+
+        # downsample
+#        self.W_m2 = conv2d(1024, 1024, 1, 1, bias=False)
+#        self.W_m3 = conv2d(1024 * 2, 1024, 1, 1, bias=False)
+#        self.W_m4 = conv2d(1024 * 2, 1024, 1, 1, bias=False)
+#        self.downsample = nn.MaxPool2d(2)
+        self.bn = False
+        if self.bn:
+            self.batchnorm = nn.BatchNorm2d(1024)
 
     def num_channels(self):
         return [256, 512, 1024]
+
     def encode_feats(self, inp,lang):
         x2, x3, x4 = self.encoder(inp)
 #        x4 = x4.permute(0, 2, 3, 1)
 #        x4 = self.W_v(x4).permute(0, 3, 1, 2)
+        ft = self.sigma(self.W_t(lang))
+        bs, dim = ft.shape
+        ft = ft.view(bs, -1, 1, 1)
+#        v2 = self.sigma(self.W_v2(x2))
+#        m2 = v2 * ft
+#        m2 = self.downsample(m2)
+#        m2 = self.sigma(self.W_m2(m2))
+#        v3 = self.sigma(self.W_v3(x3))
+#        m3 = torch.cat([m2, v3], dim=1)
+#        m3 = self.downsample(m3)
+#        m3 = self.sigma(self.W_m3(m3))
+#        v4 = self.sigma(self.W_v4(x4))
+#        m4 = torch.cat([m3, v4], dim=1)
+#        m4 = self.sigma(self.W_m4(m4))
         x4 = self.W_v(x4)
         if self.bn:
             x4 = self.batchnorm(x4)
-        bs, dim = lang.shape
-        lang = self.W_t(lang).view(bs, -1, 1, 1)
-        return [self.sigma(x4)*self.sigma(lang)], []
-        # print(lang.size())
-        
-#        x_ = self.afs_stage(lang,[x2, x3, x4])
-#        feats, E=self.garan_stage(lang,x_)
-
-        # Special case, the number of feature map is one.
+        x4 = self.sigma(x4) * ft
+#        lang = self.W_t(lang).view(bs, -1, 1, 1)
+#        return [self.sigma(x4)*self.sigma(lang)], []
+        return [x4], []
 
 
 class YoloBackBone(BackBone):
