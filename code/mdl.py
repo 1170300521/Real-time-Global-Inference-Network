@@ -15,7 +15,8 @@ from extended_config import cfg as conf
 from dat_loader import get_data
 from afs import AdaptiveFeatureSelection
 from garan import GaranAttention
-from darknet import darknet53
+from darknet import darknet53, darknet_conv2d_bn_leaky, darknet_resbolck
+
 
 # conv2d, conv2d_relu are adapted from
 # https://github.com/fastai/fastai/blob/5c4cefdeaf11fdbbdf876dbe37134c118dca03ad/fastai/layers.py#L98
@@ -185,20 +186,93 @@ class SSDBackBone(BackBone):
 class YoloBackBone(BackBone):
     def after_init(self):
         self.num_chs = self.num_channels()
-        self.afs_stage=AdaptiveFeatureSelection(2, [256, 512], 0, [], self.num_chs[-1], 2048,512,1024).to(self.device)
+        # self.afs_stage=AdaptiveFeatureSelection(2, [256, 512], 0, [], self.num_chs[-1], 2048,512,1024).to(self.device)
 
-        self.garan_stage = GaranAttention(2048, 1024, n_head=4).to(self.device)
+        self.seg_garan = GaranAttention(2048, 512, n_head=2).to(self.device)
+        self.det_garan = GaranAttention(2048, 512, n_head=2).to(self.device)
+        # simple fusion
+        dim = num_chs[-1]
+        self.F_v_proj = darknet_resblock(dim ,dim//2)
+        self.f_q_proj = nn.Sequential(
+            nn.Linear(dim*2, dim),
+            nn.LeakyReLU(0.1),
+            nn.BatchNorm1d(dim)
+        )
+        self.F_m = nn.Sequential(
+            nn.LeakyReLU(0.1),
+            nn.BatchNorm2d(dim)
+        )
+        # upsample
+        self.up_conv2d_11 = darknet_conv2d_bn_leaky(512, 512, 1)
+        self.up_conv2d_12 = darknet_conv2d_bn_leaky(1024 + 512, 512, 1)
+        self.up_conv2d_21 = darknet_conv2d_bn_leaky(256, 256, 1)
+        self.up_conv2d_22 = darknet_conv2d_bn_leaky(512 + 256, 512, 1)
+        # downsample
+        # self.down_11 = darknet_conv2d_bn_leaky(512, 512, 1)
+        self.down_12 = darknet_conv2d_bn_leaky(512, 256, 1)
+        self.down_13 = darknet_conv2d_bn_leaky(256, 512, 3)
+        self.down_21 = darknet_conv2d_bn_leaky(1024, 512, 1)
+        self.down_22 = darknet_conv2d_bn_leaky(512, 256, 1)
+        self.down_23 = darknet_conv2d_bn_leaky(256, 512, 3)
+        self.det_top = darknet_conv2d_bn_leaky(512 + 1024, 512, 1)
+
     def num_channels(self):
         return [256, 512, 1024]
+    
+    def simple_fusion(self, fv, fq, dim=1024):
+        fv = self.F_v_proj(fv)
+        fq = self.f_q_proj(fq)
+        b, d_q = fq.shape
+        fq = fq.view(b, d_q, 1, 1)
+        fm = fv * fq
+        return self.F_m(fm)
+    
+    def upsample_1(self, x, y)
+        x = nn.UpSample(scale_factor=2)(x)
+        y = self.up_conv2d_11(y)
+        out = torch.cat([x,y], dim=1)
+        out = self.up_conv2d_12(out)
+        return out
+
+    def upsample_2(self, x, y):
+        x = nn.UpSample(scale_factor=2)(x)
+        y = self.up_conv2d_21(y)
+        out = torch.cat([x, y], dim=1)
+        out = self.up_conv2d_22(out)
+        return out
+
+    def downsample_1(self, x, y):
+        x = nn.AvgPool2d(2)(x)
+        x = self.down_12(x)
+        x = self.down_13(x)
+        return torch.cat([x, y], dim=1)
+
+    def downsample_2(self, x, y):
+        x = self.down_21(x)
+        x = nn.AvgPool2d(x)(x)
+        x = self.down_22(x)
+        x = self.down_23(x)
+        return torch.cat([x, y], dim=1)
+
     def encode_feats(self, inp,lang):
         x2, x3, x4 = self.encoder(inp)
-        # print(lang.size())
-        
-        x_ = self.afs_stage(lang,[x2, x3, x4])
-        feats, E=self.garan_stage(lang,x_)
+        Fm = self.simple_fusion(x4, lang)
+        # segmentation top-down branch
+        Fm_mid = self.upsample_1(Fm, x3)
+        Fm_down = self.upsample_2(Fm_mid, x2)
+        Fm_down, att_seg = self.seg_garan(lang, Fm_down)
+        # detection bottom-up branch
+        Fm_mid = self.downsample_1(Fm_down, Fm_mid)
+        Fm_top = self.downsample_2(Fm_mid, Fm)
+        Fm_top = self.det_top(Fm_top)
+        Fm_top, att_det = self.det_garan(lang, Fm_top)
+
+        # x_ = self.afs_stage(lang,[x2, x3, x4])
+        # feats, E=self.garan_stage(lang,x_)
 
         # Special case, the number of feature map is one.
-        return [feats], [E]
+        # return [feats], [E]
+        return [Fm_top], [att_det]
 
 
 class ZSGNet(nn.Module):
@@ -226,6 +300,7 @@ class ZSGNet(nn.Module):
         self.bid = cfg['use_bidirectional']
         self.lstm_dim = cfg['lstm_dim']
         self.img_dim = cfg['img_dim']
+        self.img_dim = 512  # same as mcn
 
         # Calculate output dimension of LSTM
         self.lstm_out_dim = self.lstm_dim * (self.bid + 1)

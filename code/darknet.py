@@ -353,3 +353,28 @@ def darknet53(load_weights, config_path="./configs/yolov3.cfg", weights_path="./
     if load_weights:
         model.load_darknet_weights(weights_path)
     return model
+
+
+def darknet_conv2d(ni: int, nf: int, ks: int = 3, stride: int = 1,
+           padding: int = None, bias=False) -> nn.Conv2d:
+    "Create and initialize `nn.Conv2d` layer. `padding` defaults to `ks//2`."
+    if padding is None:
+        padding = ks//2
+    return nn.Conv2d(ni, nf, kernel_size=ks, stride=stride,
+                     padding=padding, bias=bias)
+
+
+def darknet_conv2d_bn_leaky(ni: int, nf: int, ks: int=3, stride: int = 1, padding: int=None,
+                            bias: bool=False) -> nn.Sequential:
+    return nn.Sequential(
+        darknet_conv2d(ni, nf, ks, stride, padding, bias),
+        nn.BatchNorm2d(nf),
+        nn.LeakyReLU(0.1)
+    )
+
+
+def darknet_resblock(num_input,  num_filters):
+    return nn.Sequential(
+        darknet_conv2d_bn_leaky(num_input, num_filters, 1),
+        darknet_conv2d_bn_leaky(num_filters, num_filters*2, 3)
+    )
