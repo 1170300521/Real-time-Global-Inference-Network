@@ -21,8 +21,8 @@ import cv2
 from extended_config import cfg as conf
 
 
-
-nlp = spacy.load('en_core_web_md')
+nlp = spacy.load('en_vectors_web_lg')
+#nlp = spacy.load('en_core_web_md')
 
 def generate_iou_groundtruth(grid_shapes,true_anchor,true_wh):
     """

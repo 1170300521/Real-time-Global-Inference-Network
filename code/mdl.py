@@ -15,7 +15,7 @@ from extended_config import cfg as conf
 from dat_loader import get_data
 from afs import AdaptiveFeatureSelection
 from garan import GaranAttention
-from darknet import darknet53, darknet_conv2d_bn_leaky, darknet_resbolck
+from darknet import darknet53, darknet_conv2d_bn_leaky, darknet_resblock
 
 
 # conv2d, conv2d_relu are adapted from
@@ -135,7 +135,8 @@ class BackBone(nn.Module):
         out = [self.concat_we(
             f, we, only_we=only_we, only_grid=only_grid) for f in feats]
 
-        return out,att_maps
+        # return out,att_maps
+        return feats, att_maps
 
 
 class RetinaBackBone(BackBone):
@@ -191,7 +192,7 @@ class YoloBackBone(BackBone):
         self.seg_garan = GaranAttention(2048, 512, n_head=2).to(self.device)
         self.det_garan = GaranAttention(2048, 512, n_head=2).to(self.device)
         # simple fusion
-        dim = num_chs[-1]
+        dim = self.num_chs[-1]
         self.F_v_proj = darknet_resblock(dim ,dim//2)
         self.f_q_proj = nn.Sequential(
             nn.Linear(dim*2, dim),
@@ -227,15 +228,15 @@ class YoloBackBone(BackBone):
         fm = fv * fq
         return self.F_m(fm)
     
-    def upsample_1(self, x, y)
-        x = nn.UpSample(scale_factor=2)(x)
+    def upsample_1(self, x, y):
+        x = nn.Upsample(scale_factor=2)(x)
         y = self.up_conv2d_11(y)
         out = torch.cat([x,y], dim=1)
         out = self.up_conv2d_12(out)
         return out
 
     def upsample_2(self, x, y):
-        x = nn.UpSample(scale_factor=2)(x)
+        x = nn.Upsample(scale_factor=2)(x)
         y = self.up_conv2d_21(y)
         out = torch.cat([x, y], dim=1)
         out = self.up_conv2d_22(out)
@@ -249,7 +250,7 @@ class YoloBackBone(BackBone):
 
     def downsample_2(self, x, y):
         x = self.down_21(x)
-        x = nn.AvgPool2d(x)(x)
+        x = nn.AvgPool2d(2)(x)
         x = self.down_22(x)
         x = self.down_23(x)
         return torch.cat([x, y], dim=1)
@@ -300,7 +301,6 @@ class ZSGNet(nn.Module):
         self.bid = cfg['use_bidirectional']
         self.lstm_dim = cfg['lstm_dim']
         self.img_dim = cfg['img_dim']
-        self.img_dim = 512  # same as mcn
 
         # Calculate output dimension of LSTM
         self.lstm_out_dim = self.lstm_dim * (self.bid + 1)
@@ -317,6 +317,7 @@ class ZSGNet(nn.Module):
         else:
             # both image, lang blind
             self.start_dim_head = 2
+        self.start_dim_head = 512
 
         # If shared heads for classification, box regression
         # This is the config used in the paper
@@ -338,7 +339,7 @@ class ZSGNet(nn.Module):
             self.lstm = nn.LSTM(self.emb_dim, self.lstm_dim,
                                 bidirectional=self.bid, batch_first=False)
         else:
-            self.gru = nn.GRU(self.emb_dim, self.lstm_dim, 
+            self.gru = nn.GRU(self.emb_dim, self.lstm_dim, dropout=0.1, 
                                 bidirectional=self.bid, batch_first=False)
         self.after_init()
 
