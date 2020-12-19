@@ -87,6 +87,41 @@ def create_anchors(sizes, ratios, scales, flatten=True, device=torch.device('cud
     return cthw2tlbr(anchs) if flatten else anchors
 
 
+def create_yolo_anchors(sizes, anchor_type, img_size, flatten=True, device=torch.device('cuda')):
+    "Create anchor of `sizes`, 'anchor_type'"
+    # device = torch.device('cuda')
+#    aspects = [[[s*np.sqrt(r), s*np.sqrt(1/r)]
+#                for s in scales] for r in ratios]
+#    aspects = torch.tensor(aspects).to(device).view(-1, 2)
+    anchors = []
+    num_anchors = len(anchor_type)
+    for h, w in sizes:
+        if type(h) == torch.Tensor:
+            h = int(h.item())
+            w = int(w.item())
+        stride = img_size[0] / h
+        # Calculate offsets for each grid
+        grid_x = torch.arange(w).repeat(h, 1).view([h, w, 1, 1]).float()
+        grid_y = torch.arange(h).repeat(w, 1).t().view([h, w, 1, 1]).float()
+        grid_x = grid_x.expand(h, w, num_anchors, 1)
+        grid_y = grid_y.expand(h, w, num_anchors, 1)
+        scaled_anchors = anchor_type / stride
+        anchor_w = scaled_anchors[:, 0:1].view((1, 1, num_anchors, 1)).expand(h, w, -1, 1)
+        anchor_h = scaled_anchors[:, 1:2].view((1, 1, num_anchors, 1)).expand(h, w, -1, 1)
+
+#        sized_aspects = (
+#            aspects * torch.tensor([2/h, 2/w]).to(device)).unsqueeze(0)
+#        base_grid = create_grid((h, w)).to(device).unsqueeze(1)
+#        n, a = base_grid.size(0), aspects.size(0)
+#        ancs = torch.cat([base_grid.expand(n, a, 2),
+#                          sized_aspects.expand(n, a, 2)], 2)
+        ancs = torch.cat([grid_y, grid_x, anchor_h, anchor_w], dim=-1)
+        anchors.append(ancs.view(h, w, num_anchors, 4))
+    anchs = torch.cat([anc.view(-1, 4)
+                       for anc in anchors], 0) if flatten else anchors
+    return cthw2tlbr(anchs) if flatten else anchors
+
+
 def intersection(anchors, targets):
     """
     Compute the sizes of the intersections of `anchors` by `targets`.
@@ -195,3 +230,23 @@ def reg_params_to_bbox(anchors, boxes, std12=[1, 1]):
     af = torch.cat([a111, a222], dim=2)
     aft = cthw2tlbr(af)
     return aft
+
+
+def reg_params_to_bbox1(anchors, boxes):
+    """
+    Yolo format
+    Converts reg_params to corresponding boxes
+    Assume anchors in r1c1r2c2 format
+    Boxes in standard form r*, c*, h*, w*
+    
+    """
+    anchors = anchors.to(boxes.device)
+    b, n, _, h, w = boxes.shape
+    grid_x = torch.arange(w).repeat(h,1).view(1, 1, 1, h,w).expand(b, n, 1, h, w)
+    grid_y = torch.arange(h).repeat(w,1).t().view(1, 1, 1, h,w).expand(b, n, 1, h,w)
+    grid = torch.cat([grid_y, grid_x], dim=2).float().to(boxes.device)
+    b1 = torch.sigmoid(boxes[..., :2])
+    yx = b1 + grid
+    hw = torch.exp(boxes[..., 2::]) * anchors.view(1, n, 2, 1, 1).expand(b, n, -1, h, w)
+    bbox = torch.cat([yx, hw], dim=2)
+    return cthw2tlbr(bbox)

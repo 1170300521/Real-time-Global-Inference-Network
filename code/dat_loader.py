@@ -121,7 +121,7 @@ class ImgQuDataset(Dataset):
         self.image_data = self._read_annotations(csv_file)
         # self.image_data = self.image_data.iloc[:200]
         self.img_dir = Path(self.cfg.ds_info[self.ds_name]['img_dir'])
-        self.phrase_len = 50
+        self.phrase_len = cfg.phrase_len
         self.item_getter = getattr(self, 'simple_item_getter')
         # normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
         # std=[0.229, 0.224, 0.225])
@@ -144,7 +144,7 @@ class ImgQuDataset(Dataset):
         if len(qtmp) == 0:
             # logger.error('Empty string provided')
             raise NotImplementedError
-        qlen = len(qtmp)
+        qlen = min(len(qtmp), self.phrase_len)
         q_chosen = q_chosen + ' PD'*(self.phrase_len - qlen)
         q_chosen_emb = nlp(q_chosen)
         if not len(q_chosen_emb) == self.phrase_len:
@@ -166,8 +166,8 @@ class ImgQuDataset(Dataset):
             target[2] / h, target[3] / w
         ])
 
+        rstarget=target*self.cfg.resize_img[0]
         if self.cfg['use_att_loss']:
-            rstarget=target*self.cfg.resize_img[0]
             iou_annot_stage_0=generate_iou_groundtruth([self.cfg.resize_img[0]//8,self.cfg.resize_img[0]//8],
                                                        [(rstarget[0]+rstarget[2])/16,(rstarget[1]+rstarget[3])/16],
                                                        [(rstarget[2]-rstarget[0])/16,(rstarget[3]-rstarget[1])/16])
@@ -187,7 +187,7 @@ class ImgQuDataset(Dataset):
             iou_annot_stage_2 = np.zeros([1])
         # Target in range -1 to 1
         target = 2 * target - 1
-
+        rstarget /= self.cfg.downsample
         # img = self.img_transforms(img)
         # img = Image(pil2tensor(img, np.float_).float().div_(255))
         img = pil2tensor(img, np.float_).float().div_(255)

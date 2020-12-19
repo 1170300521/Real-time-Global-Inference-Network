@@ -352,6 +352,8 @@ def darknet53(load_weights, config_path="./configs/yolov3.cfg", weights_path="./
     model = Darknet(config_path, img_size)
     if load_weights:
         model.load_darknet_weights(weights_path)
+    for param in model.parameters():
+        param.requires_grad = False
     return model
 
 
@@ -368,7 +370,7 @@ def darknet_conv2d_bn_leaky(ni: int, nf: int, ks: int=3, stride: int = 1, paddin
                             bias: bool=False) -> nn.Sequential:
     return nn.Sequential(
         darknet_conv2d(ni, nf, ks, stride, padding, bias),
-        nn.BatchNorm2d(nf),
+        nn.BatchNorm2d(nf, momentum=0.9, eps=1e-5),
         nn.LeakyReLU(0.1)
     )
 

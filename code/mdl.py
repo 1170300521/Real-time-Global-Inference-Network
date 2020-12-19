@@ -187,15 +187,16 @@ class SSDBackBone(BackBone):
 class YoloBackBone(BackBone):
     def after_init(self):
         self.num_chs = self.num_channels()
-        # self.afs_stage=AdaptiveFeatureSelection(2, [256, 512], 0, [], self.num_chs[-1], 2048,512,1024).to(self.device)
+        # self.afs_stage=AdaptiveFeatureSelection(2, [256, 512], 0, [], self.num_chs[-1], 1024,512,1024).to(self.device)
 
-        self.seg_garan = GaranAttention(2048, 512, n_head=2).to(self.device)
-        self.det_garan = GaranAttention(2048, 512, n_head=2).to(self.device)
+        self.seg_garan = GaranAttention(1024, 512, n_head=2).to(self.device)
+        self.det_garan = GaranAttention(1024, 512, n_head=2).to(self.device)
+        # self.garan_stage = GaranAttention(1024, 1024, n_head=2).to(self.device)
         # simple fusion
         dim = self.num_chs[-1]
         self.F_v_proj = darknet_resblock(dim ,dim//2)
         self.f_q_proj = nn.Sequential(
-            nn.Linear(dim*2, dim),
+            nn.Linear(dim, dim),
             nn.LeakyReLU(0.1),
             nn.BatchNorm1d(dim)
         )
@@ -211,6 +212,7 @@ class YoloBackBone(BackBone):
         # downsample
         # self.down_11 = darknet_conv2d_bn_leaky(512, 512, 1)
         self.down_12 = darknet_conv2d_bn_leaky(512, 256, 1)
+        # self.down_12 = darknet_conv2d_bn_leaky(256, 256, 1)
         self.down_13 = darknet_conv2d_bn_leaky(256, 512, 3)
         self.down_21 = darknet_conv2d_bn_leaky(1024, 512, 1)
         self.down_22 = darknet_conv2d_bn_leaky(512, 256, 1)
@@ -221,7 +223,7 @@ class YoloBackBone(BackBone):
         return [256, 512, 1024]
     
     def simple_fusion(self, fv, fq, dim=1024):
-        fv = self.F_v_proj(fv)
+        fv = self.F_v_proj(fv) + fv
         fq = self.f_q_proj(fq)
         b, d_q = fq.shape
         fq = fq.view(b, d_q, 1, 1)
@@ -269,7 +271,7 @@ class YoloBackBone(BackBone):
         Fm_top, att_det = self.det_garan(lang, Fm_top)
 
         # x_ = self.afs_stage(lang,[x2, x3, x4])
-        # feats, E=self.garan_stage(lang,x_)
+        # feats, E=self.garan_stage(lang,Fm)
 
         # Special case, the number of feature map is one.
         # return [feats], [E]
@@ -301,6 +303,8 @@ class ZSGNet(nn.Module):
         self.bid = cfg['use_bidirectional']
         self.lstm_dim = cfg['lstm_dim']
         self.img_dim = cfg['img_dim']
+        self.lang_att = cfg['lang_att']
+        self.qlen = cfg['phrase_len']
 
         # Calculate output dimension of LSTM
         self.lstm_out_dim = self.lstm_dim * (self.bid + 1)
@@ -341,6 +345,12 @@ class ZSGNet(nn.Module):
         else:
             self.gru = nn.GRU(self.emb_dim, self.lstm_dim, dropout=0.1, 
                                 bidirectional=self.bid, batch_first=False)
+        self.lang_att = nn.Sequential(
+            nn.Linear(self.lstm_out_dim, self.qlen),
+            nn.Tanh(),
+            nn.Dropout(0.1),
+            nn.Softmax(dim=1),
+        )
         self.after_init()
 
     def after_init(self):
@@ -410,7 +420,7 @@ class ZSGNet(nn.Module):
         else:
             return hidden_a
 
-    def apply_lstm(self, word_embs, qlens, max_qlen, get_full_seq=False):
+    def apply_lstm(self, word_embs, qlens, max_qlen, lang_att=False):
         """
         Applies lstm function.
         word_embs: word embeddings, B x seq_len x 300
@@ -441,6 +451,9 @@ class ZSGNet(nn.Module):
         # T x B x L
         lstm_out, req_lens = pad_packed_sequence(
             lstm_out1, batch_first=False, total_length=max_qlen)
+        # merge_mode for bidirectional: sum
+        lstm_out = lstm_out.view(max_seq_len, bs, self.bid + 1, -1)
+        lstm_out = lstm_out.sum(2)
 
         # TODO: Simplify getting the last vector
         masks = (qlens1-1).view(1, -1, 1).expand(max_qlen,
@@ -450,9 +463,10 @@ class ZSGNet(nn.Module):
         qvec_out = word_embs.new_zeros(qvec_sorted.shape)
         qvec_out[perm_idx] = qvec_sorted
         # if full sequence is needed for future work
-        if get_full_seq:
+        if lang_att:
             lstm_out_1 = lstm_out.transpose(1, 0).contiguous()
-            return lstm_out_1
+            att_vec = self.lang_att(lstm_out_1).unsqueeze(-1)
+            return att_vec.sum(1)
         return qvec_out.contiguous()
 
     def forward(self, inp: Dict[str, Any]):

@@ -20,16 +20,18 @@ def learner_init(uid: str, cfg: CN) -> Learner:
 
     # Ugly hack because I wanted ratios, scales
     # in fractional formats
-    if type(cfg['ratios']) != list:
-        ratios = eval(cfg['ratios'], {})
-    else:
-        ratios = cfg['ratios']
-    if type(cfg['scales']) != list:
-        scales = cfg['scale_factor'] * np.array(eval(cfg['scales'], {}))
-    else:
-        scales = cfg['scale_factor'] * np.array(cfg['scales'])
-
-    num_anchors = len(ratios) * len(scales)
+#    if type(cfg['ratios']) != list:
+#        ratios = eval(cfg['ratios'], {})
+#    else:
+#        ratios = cfg['ratios']
+#    if type(cfg['scales']) != list:
+#        scales = cfg['scale_factor'] * np.array(eval(cfg['scales'], {}))
+#    else:
+#        scales = cfg['scale_factor'] * np.array(cfg['scales'])
+#
+#    num_anchors = len(ratios) * len(scales)
+    anchors = cfg['anchors']
+    num_anchors = len(anchors)
     mdl = get_default_net(num_anchors=num_anchors, cfg=cfg)
     mdl.to(device)
     if cfg.do_dist:
@@ -41,11 +43,13 @@ def learner_init(uid: str, cfg: CN) -> Learner:
         # Use data parallel
         mdl = torch.nn.DataParallel(mdl)
 
-    loss_fn = get_default_loss(ratios, scales, cfg)
+#    loss_fn = get_default_loss(ratios, scales, cfg)
+    loss_fn = get_default_loss(anchors, cfg)
     loss_fn.to(device)
 
-    eval_fn = get_default_eval(ratios, scales, cfg)
+#    eval_fn = get_default_eval(ratios, scales, cfg)
     # eval_fn.to(device)
+    eval_fn = get_default_eval(anchors, cfg)
     opt_fn = partial(torch.optim.Adam, betas=(0.9, 0.99))
 
     learn = Learner(uid=uid, data=data, mdl=mdl, loss_fn=loss_fn,

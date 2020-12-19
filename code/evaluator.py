@@ -1,7 +1,9 @@
+import numpy as np
 import torch
 from torch import nn
-from anchors import (create_anchors, reg_params_to_bbox,
-                     IoU_values, x1y1x2y2_to_y1x1y2x2)
+from anchors import (create_anchors, reg_params_to_bbox1,
+                     IoU_values, x1y1x2y2_to_y1x1y2x2,
+                     create_yolo_anchors)
 from typing import Dict
 from functools import partial
 # from utils import reduce_dict
@@ -22,12 +24,12 @@ class Evaluator(nn.Module):
     To get the accuracy. Operates at training time.
     """
 
-    def __init__(self, ratios, scales, cfg):
+    def __init__(self, anchors, cfg):
         super().__init__()
         self.cfg = cfg
 
-        self.ratios = ratios
-        self.scales = scales
+#        self.ratios = ratios
+#        self.scales = scales
 
         self.alpha = cfg['alpha']
         self.gamma = cfg['gamma']
@@ -39,16 +41,21 @@ class Evaluator(nn.Module):
 
         self.met_keys = ['Acc', 'MaxPos']
         self.anchs = None
+#        self.get_anchors = partial(
+#            create_anchors, ratios=self.ratios,
+#            scales=self.scales, flatten=True)
+        self.anchor_type = torch.tensor(anchors).float() / 416 * cfg['resize_img'][0]
         self.get_anchors = partial(
-            create_anchors, ratios=self.ratios,
-            scales=self.scales, flatten=True)
+            create_yolo_anchors, anchor_type=self.anchor_type,
+            img_size=cfg['resize_img'], flatten=True)
 
         self.acc_iou_threshold = self.cfg['acc_iou_threshold']
 
     def forward(self, out: Dict[str, torch.tensor],
                 inp: Dict[str, torch.tensor]) -> Dict[str, torch.tensor]:
 
-        annot = inp['annot']
+#        annot = inp['annot']
+        ori_annot = inp['bboxs']
         att_box = out['att_out']
         reg_box = out['bbx_out']
         feat_sizes = out['feat_sizes']
@@ -75,26 +82,27 @@ class Evaluator(nn.Module):
         att_box_best, att_box_best_ids = att_box_sigmoid.max(1)
         # self.att_box_best = att_box_best
 
-        ious1 = IoU_values(annot, anchs)
+        ious1 = IoU_values(ori_annot, anchs)
         gt_mask, expected_best_ids = ious1.max(1)
 
-        actual_bbox = reg_params_to_bbox(
-            anchs, reg_box)
+        actual_bbox = reg_params_to_bbox1(
+            self.anchor_type, reg_box)
 
         best_possible_result, _ = self.get_eval_result(
-            actual_bbox, annot, expected_best_ids)
+            actual_bbox, ori_annot, expected_best_ids)
 
         msk = None
         actual_result, pred_boxes = self.get_eval_result(
-            actual_bbox, annot, att_box_best_ids, msk)
+            actual_bbox, ori_annot, att_box_best_ids, msk)
 
         out_dict = {}
         out_dict['Acc'] = actual_result
         out_dict['MaxPos'] = best_possible_result
         out_dict['idxs'] = inp['idxs']
 
-        reshaped_boxes = x1y1x2y2_to_y1x1y2x2(reshape(
-            (pred_boxes + 1)/2, (inp['img_size'])))
+#        reshaped_boxes = x1y1x2y2_to_y1x1y2x2(reshape(
+#            (pred_boxes + 1)/2, (inp['img_size'])))
+        reshaped_boxes = x1y1x2y2_to_y1x1y2x2(pred_boxes*self.cfg.downsample)
         out_dict['pred_boxes'] = reshaped_boxes
         out_dict['pred_scores'] = att_box_best
         # orig_annot = inp['orig_annot']
