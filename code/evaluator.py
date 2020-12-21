@@ -86,7 +86,7 @@ class Evaluator(nn.Module):
         gt_mask, expected_best_ids = ious1.max(1)
 
         actual_bbox = reg_params_to_bbox1(
-            self.anchor_type, reg_box)
+            self.anchor_type/self.cfg.downsample, reg_box)
 
         best_possible_result, _ = self.get_eval_result(
             actual_bbox, ori_annot, expected_best_ids)
@@ -125,5 +125,5 @@ class Evaluator(nn.Module):
         return (ious >= self.acc_iou_threshold).float().mean(), best_boxes
 
 
-def get_default_eval(ratios, scales, cfg):
-    return Evaluator(ratios, scales, cfg)
+def get_default_eval(anchors, cfg):
+    return Evaluator(anchors,  cfg)

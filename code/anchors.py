@@ -214,6 +214,21 @@ def bbox_to_reg_params(anchors, boxes):
     return torch.cat((trc, thw), 2)
 
 
+def bbox_to_reg_params1(anchors, boxes):
+    """
+    Converts boxes to corresponding reg params
+    Assume both in rchw format
+    """
+    boxes = tlbr2cthw(boxes)
+    anchors = tlbr2cthw(anchors)
+    anchors = anchors.expand(boxes.size(0), anchors.size(0), 4)
+    boxes = boxes.unsqueeze(1)
+    # trc = (boxes[..., :2] - anchors[..., :2]) / (anchors[..., 2:] + 1e-8)
+    trc = boxes[..., :2] - anchors[..., :2]
+    thw = torch.log(boxes[..., 2:] / (anchors[..., 2:] + 1e-8))
+    return torch.cat((trc, thw), 2)
+
+
 def reg_params_to_bbox(anchors, boxes, std12=[1, 1]):
     """
     Converts reg_params to corresponding boxes
@@ -241,12 +256,18 @@ def reg_params_to_bbox1(anchors, boxes):
     
     """
     anchors = anchors.to(boxes.device)
-    b, n, _, h, w = boxes.shape
-    grid_x = torch.arange(w).repeat(h,1).view(1, 1, 1, h,w).expand(b, n, 1, h, w)
-    grid_y = torch.arange(h).repeat(w,1).t().view(1, 1, 1, h,w).expand(b, n, 1, h,w)
+    n = anchors.size(0)
+    b = boxes.size(0)
+    h = int(np.sqrt(boxes.size(1)/n))
+    w = h
+    grid_x = torch.arange(w).repeat(h,1).view(1, h*w, 1).expand(b, -1, 1)
+    grid_y = torch.arange(h).repeat(w,1).t().contiguous()
+    grid_y = grid_y.view(1,h*w, 1).expand(b, -1, 1)
     grid = torch.cat([grid_y, grid_x], dim=2).float().to(boxes.device)
+    grid = grid.view(b, h*w, 1, 2).expand(b, h*w, n, 2).contiguous().view(b, h*w*n, 2)
     b1 = torch.sigmoid(boxes[..., :2])
     yx = b1 + grid
-    hw = torch.exp(boxes[..., 2::]) * anchors.view(1, n, 2, 1, 1).expand(b, n, -1, h, w)
+    hw = torch.exp(boxes[..., 2::]) * anchors.view(1, 1, n, 2).\
+        expand(b, h*w, n, 2).contiguous().view(b, h*w*n, 2)
     bbox = torch.cat([yx, hw], dim=2)
     return cthw2tlbr(bbox)

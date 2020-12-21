@@ -2,7 +2,8 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from anchors import (create_anchors, simple_match_anchors,
-                     bbox_to_reg_params, IoU_values,tlbr2cthw)
+                     bbox_to_reg_params1, IoU_values,tlbr2cthw,
+                     create_yolo_anchors)
 from typing import Dict
 from functools import partial
 # from utils import reduce_dict
@@ -15,12 +16,12 @@ class ZSGLoss(nn.Module):
     for loss computation
     """
 
-    def __init__(self, ratios, scales, cfg):
+    def __init__(self, anchors, cfg):
         super().__init__()
         self.cfg = cfg
 
-        self.ratios = ratios
-        self.scales = scales
+#        self.ratios = ratios
+#        self.scales = scales
 
         self.alpha = cfg['alpha']
         self.gamma = cfg['gamma']
@@ -38,9 +39,13 @@ class ZSGLoss(nn.Module):
         else:
             self.loss_keys = ['loss', 'cls_ls', 'box_ls']
         self.anchs = None
+        self.anchor_type = torch.tensor(anchors).float() / 416 * cfg['resize_img'][0]
         self.get_anchors = partial(
-            create_anchors, ratios=self.ratios,
-            scales=self.scales, flatten=True)
+            create_yolo_anchors, anchor_type=self.anchor_type,
+            img_size=cfg['resize_img'], flatten=True)
+#        self.get_anchors = partial(
+#            create_anchors, ratios=self.ratios,
+#            scales=self.scales, flatten=True)
 
         self.box_loss = nn.SmoothL1Loss(reduction='none')
         self.att_losses=nn.BCEWithLogitsLoss()
@@ -51,7 +56,8 @@ class ZSGLoss(nn.Module):
         inp: att_box, reg_box, feat_sizes
         annot: gt box (r1c1r2c2 form)
         """
-        annot = inp['annot']
+#        annot = inp['annot']
+        ori_annot = inp['bboxs']
         att_box = out['att_out']
         reg_box = out['bbx_out']
         feat_sizes = out['feat_sizes']
@@ -89,9 +95,9 @@ class ZSGLoss(nn.Module):
         else:
             anchs = self.anchs
         matches = simple_match_anchors(
-            anchs, annot, match_thr=self.cfg['matching_threshold'])
+            anchs, ori_annot, match_thr=self.cfg['matching_threshold'])
         bbx_mask = (matches >= 0)
-        ious1 = IoU_values(annot, anchs)
+        ious1 = IoU_values(ori_annot, anchs)
         _, msk = ious1.max(1)
 
         bbx_mask2 = torch.eye(anchs.size(0))[msk]
@@ -105,7 +111,7 @@ class ZSGLoss(nn.Module):
             bbx_mask = bbx_mask | bbx_mask2
 
         # all clear
-        gt_reg_params = bbox_to_reg_params(anchs, annot)
+        gt_reg_params = bbox_to_reg_params1(anchs, ori_annot)
         box_l = self.box_loss(reg_box, gt_reg_params)
         # box_l_relv = box_l.sum(dim=2)[bbx_mask]
         box_l_relv = box_l.sum(dim=2) * bbx_mask.float()
@@ -167,5 +173,5 @@ class ZSGLoss(nn.Module):
         # return reduce_dict(out_dict)
 
 
-def get_default_loss(ratios, scales, cfg):
-    return ZSGLoss(ratios, scales, cfg)
+def get_default_loss(anchors, cfg):
+    return ZSGLoss(anchors, cfg)
